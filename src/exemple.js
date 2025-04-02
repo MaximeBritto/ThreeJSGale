@@ -1,4 +1,4 @@
-import { addModelToList } from './modelLoader';
+import { addModelToList } from './modelLoader.js';
 
 /**
  * Exemple d'utilisation du gestionnaire de modèles FBX
