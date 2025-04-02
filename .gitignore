@@ -3,46 +3,36 @@
 /.pnp
 .pnp.js
 
-# Fichiers de build
-/dist
-/build
+# Production - conserver le dossier dist pour Render
+# /dist
+
+# Fichiers de logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+logs
+*.log
 
 # Fichiers d'environnement
-.env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-logs
-*.log
-
-# Fichiers du système d'exploitation
+# Fichiers d'éditeurs
+.vscode/*
+!.vscode/extensions.json
+.idea
 .DS_Store
-Thumbs.db
-desktop.ini
-
-# Fichiers d'éditeur
-.idea/
-.vscode/
-*.sublime-project
-*.sublime-workspace
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-# Fichiers temporaires
-.tmp
-.temp
-
-# Fichiers de coverage
-/coverage
-
-# Dossiers spécifiques au projet 
-/.cache 
+# Cache et fichiers temporaires
+.cache/
+/dist-ssr
+*.local 

@@ -4,6 +4,9 @@ export default {
     build: {
         outDir: 'dist',
         assetsDir: 'assets',
+        minify: 'terser',
+        sourcemap: false,
+        emptyOutDir: true,
         rollupOptions: {
             output: {
                 manualChunks: {
@@ -16,12 +19,13 @@ export default {
         port: 3000,
         open: true
     },
+    preview: {
+        port: 3000
+    },
     resolve: {
         alias: {
-            '@': '/src',
-            'three': 'three'
-        },
-        dedupe: ['three']
+            '@': '/src'
+        }
     },
     optimizeDeps: {
         include: [

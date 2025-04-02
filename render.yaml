@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: threejs-game
+    env: node
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+    buildFilter:
+      paths:
+        - src/**
+        - public/**
+        - index.html
+        - package.json
+        - package-lock.json
+        - vite.config.js
+        - server.js 
