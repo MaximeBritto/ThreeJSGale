@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { loadModels, loadFBXModel } from './modelLoader';
 import { ajouterExempleDeModele } from './exemple';
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 // Variables globales
 let scene, camera, renderer, controls;
@@ -30,7 +30,7 @@ let showBones = false;
 let animationFrameId = null;
 let gameOver = false;
 let isMainMenuVisible = true; // Menu principal visible au démarrage
-let mainMenuElement = null, mapSelectionElement = null, spellSelectionElement = null;
+let mainMenuElement = null, mapSelectionElement = null;
 let controlsElement, aboutElement; // Variables pour les écrans de contrôles et à propos
 let selectedSpell = 'fireball';
 let keysPressed = {};
