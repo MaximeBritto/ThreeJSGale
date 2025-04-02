@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { loadModels, loadFBXModel } from './modelLoader';
-import { ajouterExempleDeModele } from './exemple';
+import { loadModels, loadFBXModel } from './modelLoader.js';
+import { ajouterExempleDeModele } from './exemple.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
