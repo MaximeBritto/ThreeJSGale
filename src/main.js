@@ -5,6 +5,71 @@ import { ajouterExempleDeModele } from './exemple.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
+// Fonction de diagnostic pour aider à déboguer les problèmes de chargement
+function diagnosticModels() {
+  console.log("=== DIAGNOSTIC DES MODÈLES FBX ===");
+  
+  // Vérifier si fetch est disponible
+  if (typeof fetch === 'function') {
+    console.log("Tentative de vérification des fichiers de modèles...");
+    
+    // Test d'accès au fichier principal utilisé
+    fetch('/models/ecureuilSama.fbx')
+      .then(response => {
+        if (response.ok) {
+          console.log("✅ Le fichier ecureuilSama.fbx est accessible.");
+          return response.blob();
+        } else {
+          console.error("❌ Le fichier ecureuilSama.fbx n'est pas accessible:", response.status, response.statusText);
+          throw new Error(`Fichier non trouvé: ${response.status} ${response.statusText}`);
+        }
+      })
+      .then(blob => {
+        console.log("Taille du fichier FBX:", (blob.size / 1024).toFixed(2), "KB");
+        // Vérifier si la taille est raisonnable (> 1KB)
+        if (blob.size < 1024) {
+          console.warn("⚠️ Le fichier FBX semble trop petit, il pourrait être corrompu");
+        }
+      })
+      .catch(error => {
+        console.error("Erreur lors de la vérification du modèle:", error);
+      });
+    
+    // Vérifier le dossier models
+    fetch('/check-models')
+      .then(response => response.json())
+      .then(data => {
+        console.log("Résultat du check-models:", data);
+      })
+      .catch(error => {
+        console.error("Impossible de vérifier les modèles via l'API:", error);
+      });
+  } else {
+    console.log("fetch API n'est pas disponible dans cet environnement");
+  }
+  
+  // Tester un chargement direct
+  try {
+    const loader = new FBXLoader();
+    console.log("Loader FBX créé avec succès");
+    
+    // Modifier le chemin d'accès pour tester différentes variantes
+    const modelPath = '/models/ecureuilSama.fbx'; // Avec slash au début
+    console.log("Tentative de chargement du modèle depuis:", modelPath);
+    
+    loader.load(
+      modelPath,
+      (model) => console.log("✅ Modèle chargé avec succès"),
+      (progress) => console.log("Progression:", (progress.loaded / progress.total * 100).toFixed(0), "%"),
+      (error) => console.error("❌ Erreur de chargement du modèle direct:", error)
+    );
+  } catch (error) {
+    console.error("Exception lors de la création du loader ou du chargement:", error);
+  }
+  
+  console.log("=== FIN DU DIAGNOSTIC ===");
+}
+
 // Vérifier si on est dans un environnement navigateur ou Node.js
 // Si on est dans Node.js (comme sur Render), créer un simili-localStorage
 if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
@@ -222,6 +287,9 @@ function checkMapUnlocks() {
 
 // Initialisation de la scène
 function init() {
+    // Exécuter le diagnostic des modèles
+    diagnosticModels();
+    
     // Charger la progression du joueur
     loadProgress();
     
@@ -282,7 +350,7 @@ function init() {
     
     // Charge directement le modèle avec FBXLoader
     const loader = new FBXLoader();
-    loader.load('models/ecureuilSama.fbx', (model) => {
+    loader.load('/models/ecureuilSama.fbx', (model) => {
         character = model;
         scene.add(character);
         console.log('Modèle écureuil chargé avec succès');
@@ -860,7 +928,7 @@ function createExternalGround(startX, endX, startZ, endZ) {
 // Créer un arbre stylisé
 function createTree(x, y, z) {
     const loader = new FBXLoader();
-    loader.load('models/decors/Tree.fbx', (fbx) => {
+    loader.load('/models/decors/Tree.fbx', (fbx) => {
         // Ajuster l'échelle - beaucoup plus petit
         fbx.scale.set(0.0015, 0.0015, 0.0015);
         fbx.position.set(x, y, z);
@@ -944,7 +1012,7 @@ function createRock(x, y, z) {
 // Créer un cactus (pour le désert)
 function createCactus(x, y, z) {
     const loader = new FBXLoader();
-    loader.load('models/decors/cactos.fbx', (fbx) => {
+    loader.load('/models/decors/cactos.fbx', (fbx) => {
         // Ajuster l'échelle - agrandir les cactus
         fbx.scale.set(0.0055, 0.0055, 0.0055);
         
@@ -2432,7 +2500,7 @@ function spawnEnemy() {
     // D'abord charger le modèle de base
     const loader = new FBXLoader();
     
-    loader.load('models/Whiteclown.fbx', (enemyModel) => {
+    loader.load('/models/Whiteclown.fbx', (enemyModel) => {
         // Ajuster l'échelle
         enemyModel.scale.set(0.01, 0.01, 0.01);
         
@@ -2476,7 +2544,7 @@ function spawnEnemy() {
         enemyModel.userData.mixer = mixer;
         
         // Maintenant charger l'animation WhiteclownInjured.fbx
-        loader.load('models/WhiteclownInjured.fbx', (animationModel) => {
+        loader.load('/models/WhiteclownInjured.fbx', (animationModel) => {
             console.log("Animation 'WhiteclownInjured' chargée");
             
             // Vérifier si l'animation a des animations
@@ -3426,7 +3494,7 @@ function createMenuScenery() {
 // Créer un arbre simplifié pour la scène du menu
 function createMenuTree(x, y, z) {
     const loader = new FBXLoader();
-    loader.load('models/decors/Tree.fbx', (fbx) => {
+    loader.load('/models/decors/Tree.fbx', (fbx) => {
         // Ajuster l'échelle - beaucoup plus petit
         fbx.scale.set(0.001, 0.001, 0.001);
         fbx.position.set(x, y, z);
@@ -3485,7 +3553,7 @@ function createMenuRock(x, y, z) {
 // Créer un cactus simplifié pour la scène du menu
 function createMenuCactus(x, y, z) {
     const loader = new FBXLoader();
-    loader.load('models/decors/cactos.fbx', (fbx) => {
+    loader.load('/models/decors/cactos.fbx', (fbx) => {
         // Ajuster l'échelle - beaucoup plus petit
         fbx.scale.set(0.001, 0.001, 0.001);
         fbx.position.set(x, y, z);
@@ -3608,14 +3676,14 @@ function loadMenuCharacters() {
     const loader = new FBXLoader();
     
     // Charger le personnage (écureuil)
-    loader.load('models/ecureuilSama.fbx', (fbx) => {
+    loader.load('/models/ecureuilSama.fbx', (fbx) => {
         menuCharacter = fbx;
         menuCharacter.scale.set(0.01, 0.01, 0.01);
         menuCharacter.position.set(-5, 0, 0);
         menuScene.add(menuCharacter);
         
         // Charger l'animation de course pour l'écureuil
-        loader.load('models/runMouse.fbx', (anim) => {
+        loader.load('/models/runMouse.fbx', (anim) => {
             menuCharacterMixer = new THREE.AnimationMixer(menuCharacter);
             const runAction = menuCharacterMixer.clipAction(anim.animations[0]);
             runAction.play();
@@ -3628,14 +3696,14 @@ function loadMenuCharacters() {
     });
     
     // Charger l'ennemi (Whiteclown)
-    loader.load('models/Whiteclown.fbx', (fbx) => {
+    loader.load('/models/Whiteclown.fbx', (fbx) => {
         menuEnemy = fbx;
         menuEnemy.scale.set(0.01, 0.01, 0.01);
         menuEnemy.position.set(-8, 0, 0);
         menuScene.add(menuEnemy);
         
         // Charger l'animation de course pour l'ennemi
-        loader.load('models/WhiteclownInjured.fbx', (anim) => {
+        loader.load('/models/WhiteclownInjured.fbx', (anim) => {
             menuEnemyMixer = new THREE.AnimationMixer(menuEnemy);
             if (anim.animations && anim.animations.length > 0) {
                 const runAction = menuEnemyMixer.clipAction(anim.animations[0]);
@@ -3643,7 +3711,7 @@ function loadMenuCharacters() {
                 console.log('Animation de course de l\'ennemi chargée');
             } else {
                 // Essayer de charger l'animation alternative
-                loader.load('models/WhiteclownInjured.fbx', (fallbackAnim) => {
+                loader.load('/models/WhiteclownInjured.fbx', (fallbackAnim) => {
                     if (fallbackAnim.animations && fallbackAnim.animations.length > 0) {
                         const runAction = menuEnemyMixer.clipAction(fallbackAnim.animations[0]);
                         runAction.play();
@@ -5283,7 +5351,7 @@ function preloadEnemyModels(callback) {
     const loader = new FBXLoader();
     
     // Charger le modèle principal
-    loader.load('models/Whiteclown.fbx', (model) => {
+    loader.load('/models/Whiteclown.fbx', (model) => {
         // Configurer correctement le modèle avant de le mettre en cache
         model.scale.set(0.01, 0.01, 0.01);
         model.traverse(child => {

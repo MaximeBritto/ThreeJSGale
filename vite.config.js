@@ -4,7 +4,7 @@ export default {
     build: {
         outDir: 'dist',
         assetsDir: 'assets',
-        minify: 'terser',
+        minify: 'esbuild',
         sourcemap: false,
         emptyOutDir: true,
         rollupOptions: {
@@ -13,7 +13,8 @@ export default {
                     three: ['three']
                 }
             }
-        }
+        },
+        assetsInlineLimit: 0
     },
     server: {
         port: 3000,
@@ -24,7 +25,8 @@ export default {
     },
     resolve: {
         alias: {
-            '@': '/src'
+            '@': '/src',
+            'three': 'three'
         }
     },
     optimizeDeps: {
