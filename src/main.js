@@ -5,6 +5,55 @@ import { ajouterExempleDeModele } from './exemple.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
+// Vérifier si on est dans un environnement navigateur ou Node.js
+// Si on est dans Node.js (comme sur Render), créer un simili-localStorage
+if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    console.log('Environnement Node.js détecté, utilisation d\'un localStorage de substitution');
+    // Création d'un localStorage fictif pour l'environnement Node.js
+    global.localStorage = {
+        _data: {},
+        setItem: function(id, val) { this._data[id] = String(val); },
+        getItem: function(id) { return this._data[id] === undefined ? null : this._data[id]; },
+        removeItem: function(id) { delete this._data[id]; },
+        clear: function() { this._data = {}; }
+    };
+    
+    // Créer également le document et window si nécessaire pour le rendu serveur
+    if (typeof document === 'undefined') {
+        global.document = {
+            body: {
+                appendChild: function() { return null; },
+                removeChild: function() { return null; }
+            },
+            createElement: function() { 
+                return { 
+                    style: {}, 
+                    appendChild: function() { return null; },
+                    classList: {
+                        add: function() {},
+                        remove: function() {}
+                    },
+                    addEventListener: function() {}
+                }; 
+            },
+            getElementById: function() { return null; },
+            head: {
+                appendChild: function() { return null; }
+            }
+        };
+    }
+
+    if (typeof window === 'undefined') {
+        global.window = {
+            innerWidth: 1920,
+            innerHeight: 1080,
+            addEventListener: function() {},
+            removeEventListener: function() {},
+            devicePixelRatio: 1
+        };
+    }
+}
+
 // Variables globales
 let scene, camera, renderer, controls;
 let character, characterGroup, characterAnimation, mixer;
@@ -70,41 +119,61 @@ let scoreDisplay; // Élément HTML pour afficher le score et les informations d
 
 // Sauvegarder la progression du joueur
 function saveProgress() {
+    // Vérifier si localStorage est disponible (existe seulement dans les navigateurs)
+    if (typeof localStorage === 'undefined') {
+        console.log('localStorage n\'est pas disponible dans cet environnement');
+        return;
+    }
+    
     const gameData = {
         unlockedMaps: unlockedMaps,
         mapHighScores: mapHighScores
     };
     
-    localStorage.setItem('fireballGameData', JSON.stringify(gameData));
-    console.log('Progression sauvegardée');
+    try {
+        localStorage.setItem('fireballGameData', JSON.stringify(gameData));
+        console.log('Progression sauvegardée');
+    } catch (error) {
+        console.error('Erreur lors de la sauvegarde de la progression:', error);
+    }
 }
 
 // Charger la progression du joueur
 function loadProgress() {
-    const savedData = localStorage.getItem('fireballGameData');
+    // Vérifier si localStorage est disponible (existe seulement dans les navigateurs)
+    if (typeof localStorage === 'undefined') {
+        console.log('localStorage n\'est pas disponible dans cet environnement');
+        return;
+    }
     
-    if (savedData) {
-        try {
-            const gameData = JSON.parse(savedData);
-            
-            // Restaurer les maps débloquées
-            if (gameData.unlockedMaps) {
-                unlockedMaps = gameData.unlockedMaps;
+    try {
+        const savedData = localStorage.getItem('fireballGameData');
+        
+        if (savedData) {
+            try {
+                const gameData = JSON.parse(savedData);
+                
+                // Restaurer les maps débloquées
+                if (gameData.unlockedMaps) {
+                    unlockedMaps = gameData.unlockedMaps;
+                }
+                
+                // Restaurer les meilleurs scores
+                if (gameData.mapHighScores) {
+                    mapHighScores = gameData.mapHighScores;
+                }
+                
+                console.log('Progression chargée avec succès');
+                console.log('Maps débloquées:', unlockedMaps);
+                console.log('Meilleurs scores:', mapHighScores);
+            } catch (error) {
+                console.error('Erreur lors du chargement de la progression:', error);
             }
-            
-            // Restaurer les meilleurs scores
-            if (gameData.mapHighScores) {
-                mapHighScores = gameData.mapHighScores;
-            }
-            
-            console.log('Progression chargée avec succès');
-            console.log('Maps débloquées:', unlockedMaps);
-            console.log('Meilleurs scores:', mapHighScores);
-        } catch (error) {
-            console.error('Erreur lors du chargement de la progression:', error);
+        } else {
+            console.log('Aucune progression sauvegardée trouvée');
         }
-    } else {
-        console.log('Aucune progression sauvegardée trouvée');
+    } catch (error) {
+        console.error('Erreur lors de l\'accès à localStorage:', error);
     }
 }
 
