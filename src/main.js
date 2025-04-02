@@ -30,7 +30,7 @@ let showBones = false;
 let animationFrameId = null;
 let gameOver = false;
 let isMainMenuVisible = true; // Menu principal visible au démarrage
-let mainMenuElement = null, mapSelectionElement = null, spellSelectionElement = null, pauseMenuElement = null;
+let mainMenuElement = null, mapSelectionElement = null, spellSelectionElement = null;
 let controlsElement, aboutElement; // Variables pour les écrans de contrôles et à propos
 let selectedSpell = 'fireball';
 let keysPressed = {};
@@ -39,10 +39,18 @@ let currentMapType = 'forest'; // Type de map actuelle (forest, desert, cave)
 let unlockedMaps = ['forest']; // Maps débloquées (au début seulement la forêt)
 let mapHighScores = { forest: 0, desert: 0, cave: 0 }; // Meilleurs scores par map
 const MAP_UNLOCK_THRESHOLDS = { desert: 5000, cave: 10000 }; // Seuils de déblocage
+const ANIMATION_DELTA = 0.016; // Temps delta fixe pour les animations (environ 60 FPS)
+
+// Préchargement des modèles et animations d'ennemis
+let enemyModelCache = null;
+let enemyRunAnimationCache = null;
+let isEnemyModelLoading = false;
+let enemyLoadingQueue = 0;
+let isLoadingModels = false;
 
 // Variables de vie du joueur
 let playerHealth = 100; // Points de vie maximum
-let currentHealth = playerHealth; // Points de vie actuels
+let currentHealth = playerHealth;
 let isPlayerInvulnerable = false; // Pour gérer un court délai d'invulnérabilité après avoir été touché
 let healthBarElement = null; // Élément HTML pour la barre de vie
 
@@ -256,6 +264,9 @@ function init() {
 
     // Lancement de l'animation
     animate();
+    
+    // Précharger les modèles d'ennemis
+    preloadEnemyModels();
 }
 
 // Créer le sol texturé selon le type de map
@@ -414,15 +425,61 @@ function createForestBorder() {
     for (let i = -mapSize; i <= mapSize; i += spacing) {
         // Côté Nord (Z négatif)
         createTree(i, 0, -mapSize);
+        // Ajouter une deuxième rangée d'arbres pour renforcer la bordure
+        createTree(i + 0.7, 0, -mapSize - 1.5);
+        createTree(i - 0.5, 0, -mapSize - 3);
         
         // Côté Sud (Z positif)
         createTree(i, 0, mapSize);
+        // Ajouter une deuxième rangée d'arbres pour renforcer la bordure
+        createTree(i - 0.7, 0, mapSize + 1.5);
+        createTree(i + 0.5, 0, mapSize + 3);
         
         // Côté Est (X positif)
         createTree(mapSize, 0, i);
+        // Ajouter une deuxième rangée d'arbres pour renforcer la bordure
+        createTree(mapSize + 1.5, 0, i + 0.7);
+        createTree(mapSize + 3, 0, i - 0.5);
         
         // Côté Ouest (X négatif)
         createTree(-mapSize, 0, i);
+        // Ajouter une deuxième rangée d'arbres pour renforcer la bordure
+        createTree(-mapSize - 1.5, 0, i - 0.7);
+        createTree(-mapSize - 3, 0, i + 0.5);
+    }
+    
+    // Ajouter des rochers entre les arbres pour combler les trous
+    for (let i = -mapSize; i <= mapSize; i += spacing * 1.5) {
+        // Placer des rochers entre les arbres de la bordure
+        createRock(i + 1, 0, -mapSize - 0.8);
+        createRock(i - 1, 0, mapSize + 0.8);
+        createRock(mapSize + 0.8, 0, i + 1);
+        createRock(-mapSize - 0.8, 0, i - 1);
+        
+        // Quelques rochers à des emplacements aléatoires pour combler les espaces
+        if (Math.random() < 0.7) {
+            createRock(i + Math.random() - 0.5, 0, -mapSize - 2 - Math.random());
+            createRock(i + Math.random() - 0.5, 0, mapSize + 2 + Math.random());
+            createRock(mapSize + 2 + Math.random(), 0, i + Math.random() - 0.5);
+            createRock(-mapSize - 2 - Math.random(), 0, i + Math.random() - 0.5);
+        }
+    }
+    
+    // Ajouter des "groupes" d'arbres dans les coins pour renforcer davantage
+    for (let x = 0; x < 3; x++) {
+        for (let z = 0; z < 3; z++) {
+            // Coin Nord-Est
+            createTree(mapSize + x + 0.5, 0, -mapSize - z - 0.5);
+            
+            // Coin Nord-Ouest
+            createTree(-mapSize - x - 0.5, 0, -mapSize - z - 0.5);
+            
+            // Coin Sud-Est
+            createTree(mapSize + x + 0.5, 0, mapSize + z + 0.5);
+            
+            // Coin Sud-Ouest
+            createTree(-mapSize - x - 0.5, 0, mapSize + z + 0.5);
+        }
     }
 }
 
@@ -437,32 +494,88 @@ function createDesertBorder() {
             // Placer un cactus
             // Côté Nord
             createCactus(i, 0, -mapSize);
+            // Ligne additionnelle de cactus
+            if (Math.random() < 0.7) {
+                createCactus(i + 1.2, 0, -mapSize - 2);
+            }
             
             // Côté Sud
             createCactus(i, 0, mapSize);
+            // Ligne additionnelle de cactus
+            if (Math.random() < 0.7) {
+                createCactus(i - 1.2, 0, mapSize + 2);
+            }
         } else {
             // Placer une dune
             // Côté Nord
             createDune(i, 0, -mapSize);
+            // Ligne additionnelle de dunes
+            createDune(i + 1, 0, -mapSize - 2.5);
             
             // Côté Sud
             createDune(i, 0, mapSize);
+            // Ligne additionnelle de dunes
+            createDune(i - 1, 0, mapSize + 2.5);
         }
         
         if (Math.random() < 0.6) {
             // Côté Est
             createCactus(mapSize, 0, i);
+            // Ligne additionnelle de cactus
+            if (Math.random() < 0.7) {
+                createCactus(mapSize + 2, 0, i + 1.2);
+            }
             
             // Côté Ouest
             createCactus(-mapSize, 0, i);
+            // Ligne additionnelle de cactus
+            if (Math.random() < 0.7) {
+                createCactus(-mapSize - 2, 0, i - 1.2);
+            }
         } else {
             // Côté Est
             createDune(mapSize, 0, i);
+            // Ligne additionnelle de dunes
+            createDune(mapSize + 2.5, 0, i + 1);
             
             // Côté Ouest
             createDune(-mapSize, 0, i);
+            // Ligne additionnelle de dunes
+            createDune(-mapSize - 2.5, 0, i - 1);
         }
     }
+    
+    // Ajouter des rochers du désert pour combler les espaces
+    for (let i = -mapSize; i <= mapSize; i += spacing * 0.8) {
+        // Placer des rochers entre les cactus et les dunes
+        if (Math.random() < 0.6) {
+            createDesertRock(i + Math.random(), 0, -mapSize - 1 - Math.random());
+            createDesertRock(i - Math.random(), 0, mapSize + 1 + Math.random());
+            createDesertRock(mapSize + 1 + Math.random(), 0, i + Math.random());
+            createDesertRock(-mapSize - 1 - Math.random(), 0, i - Math.random());
+        }
+    }
+    
+    // Renforcer les coins avec des groupes de cactus
+    for (let j = 0; j < 4; j++) {
+        // Coins Nord-Est
+        createCactus(mapSize + 1 + j*0.7, 0, -mapSize - 1 - j*0.7);
+        
+        // Coins Nord-Ouest
+        createCactus(-mapSize - 1 - j*0.7, 0, -mapSize - 1 - j*0.7);
+        
+        // Coins Sud-Est
+        createCactus(mapSize + 1 + j*0.7, 0, mapSize + 1 + j*0.7);
+        
+        // Coins Sud-Ouest
+        createCactus(-mapSize - 1 - j*0.7, 0, mapSize + 1 + j*0.7);
+    }
+    
+    // Ajouter des grandes dunes dans les coins pour bloquer complètement le passage
+    createDune(mapSize + 3, 0, -mapSize - 3); // Nord-Est
+    createDune(-mapSize - 3, 0, -mapSize - 3); // Nord-Ouest
+    createDune(mapSize + 3, 0, mapSize + 3); // Sud-Est
+    createDune(-mapSize - 3, 0, mapSize + 3); // Sud-Ouest
 }
 
 // Créer une bordure de stalagmites autour de la map grotte
@@ -474,24 +587,96 @@ function createCaveBorder() {
     for (let i = -mapSize; i <= mapSize; i += spacing) {
         // Côté Nord
         createStalagmite(i, 0, -mapSize);
+        // Ajouter une deuxième rangée de stalagmites
+        createStalagmite(i + 0.8, 0, -mapSize - 1.5);
+        createStalagmite(i - 0.6, 0, -mapSize - 3);
         
         // Côté Sud
         createStalagmite(i, 0, mapSize);
+        // Ajouter une deuxième rangée de stalagmites
+        createStalagmite(i - 0.8, 0, mapSize + 1.5);
+        createStalagmite(i + 0.6, 0, mapSize + 3);
         
         // Côté Est
         createStalagmite(mapSize, 0, i);
+        // Ajouter une deuxième rangée de stalagmites
+        createStalagmite(mapSize + 1.5, 0, i + 0.8);
+        createStalagmite(mapSize + 3, 0, i - 0.6);
         
         // Côté Ouest
         createStalagmite(-mapSize, 0, i);
+        // Ajouter une deuxième rangée de stalagmites
+        createStalagmite(-mapSize - 1.5, 0, i - 0.8);
+        createStalagmite(-mapSize - 3, 0, i + 0.6);
         
-        // Ajouter quelques cristaux aléatoirement sur les bordures
-        if (i % 4 === 0) {
+        // Ajouter des cristaux aléatoirement sur les bordures
+        if (i % 3 === 0) { // Augmenté la fréquence des cristaux
             createCrystal(mapSize - 0.5, 0, i - 0.5);
             createCrystal(-mapSize + 0.5, 0, i + 0.5);
             createCrystal(i - 0.5, 0, mapSize - 0.5);
             createCrystal(i + 0.5, 0, -mapSize + 0.5);
+            
+            // Ajouter des cristaux supplémentaires sur la ligne extérieure
+            createCrystal(mapSize + 1.2, 0, i);
+            createCrystal(-mapSize - 1.2, 0, i);
+            createCrystal(i, 0, mapSize + 1.2);
+            createCrystal(i, 0, -mapSize - 1.2);
         }
     }
+    
+    // Ajouter des formations de cristaux dans les coins pour bloquer complètement
+    for (let x = 0; x < 4; x++) {
+        for (let z = 0; z < 4; z++) {
+            if ((x + z) % 2 === 0) { // Alternance de stalagmites et cristaux
+                // Coin Nord-Est
+                if (Math.random() < 0.7) {
+                    createStalagmite(mapSize + x, 0, -mapSize - z);
+                } else {
+                    createCrystal(mapSize + x, 0, -mapSize - z);
+                }
+                
+                // Coin Nord-Ouest
+                if (Math.random() < 0.7) {
+                    createStalagmite(-mapSize - x, 0, -mapSize - z);
+                } else {
+                    createCrystal(-mapSize - x, 0, -mapSize - z);
+                }
+                
+                // Coin Sud-Est
+                if (Math.random() < 0.7) {
+                    createStalagmite(mapSize + x, 0, mapSize + z);
+                } else {
+                    createCrystal(mapSize + x, 0, mapSize + z);
+                }
+                
+                // Coin Sud-Ouest
+                if (Math.random() < 0.7) {
+                    createStalagmite(-mapSize - x, 0, mapSize + z);
+                } else {
+                    createCrystal(-mapSize - x, 0, mapSize + z);
+                }
+            }
+        }
+    }
+    
+    // Créer des groupes de gros cristaux pour bloquer complètement certains passages
+    const largecrystals = [
+        { x: mapSize + 2, z: 0 },
+        { x: -mapSize - 2, z: 0 },
+        { x: 0, z: mapSize + 2 },
+        { x: 0, z: -mapSize - 2 }
+    ];
+    
+    largecrystals.forEach(pos => {
+        // Créer un groupe de cristaux à cette position
+        for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+                if (Math.abs(i) + Math.abs(j) <= 1) { // En forme de croix
+                    createCrystal(pos.x + i, 0, pos.z + j);
+                }
+            }
+        }
+    });
 }
 
 // Créer une barrière invisible autour de la map
@@ -691,56 +876,80 @@ function createRock(x, y, z) {
 function createCactus(x, y, z) {
     const loader = new FBXLoader();
     loader.load('models/decors/cactos.fbx', (fbx) => {
-        // Ajuster l'échelle - beaucoup plus petit
-        fbx.scale.set(0.0015, 0.0015, 0.0015);
-        fbx.position.set(x, y, z);
+        // Ajuster l'échelle - agrandir les cactus
+        fbx.scale.set(0.0055, 0.0055, 0.0055);
+        
+        // Ajuster la position pour ancrer au sol
+        fbx.position.set(x, 0, z);
         
         // Ajouter une rotation aléatoire pour plus de naturel
         fbx.rotation.y = Math.random() * Math.PI * 2;
         
-        // Configurer les ombres
+        // Configurer les ombres sans modifier la couleur d'origine
         fbx.traverse(child => {
             if (child.isMesh) {
                 child.castShadow = true;
                 child.receiveShadow = true;
-                // Donner une couleur verte au cactus
-                if (child.material) {
-                    child.material.color = new THREE.Color(0x2A7E19);
-                }
+                // Ne pas modifier la couleur ici pour conserver l'apparence originale
             }
         });
         
-        // Ajouter aux obstacles et à la scène
+        // Créer un objet de collision invisible DIRECTEMENT dans la scène plutôt qu'en tant qu'enfant
+        // Cela garantit que la collision fonctionnera indépendamment de la hiérarchie des objets
+        const collisionGeometry = new THREE.CylinderGeometry(1.5, 1.5, 6, 8);
+        const collisionMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff0000,
+            transparent: true,
+            opacity: 0.0 // Invisible en production
+            // opacity: 0.3 // Semi-visible pour déboguer les collisions si nécessaire
+        });
+        
+        const collisionObject = new THREE.Mesh(collisionGeometry, collisionMaterial);
+        // Positionner exactement au même endroit que le cactus
+        collisionObject.position.set(x, 3, z); // Y à 3 pour centrer verticalement
+        collisionObject.rotation.y = fbx.rotation.y; // Même rotation que le cactus
+        
+        // Données utilisateur pour la collision
+        collisionObject.userData = {
+            type: 'cactus_collision',
+            isObstacle: true,
+            collisionRadius: 2.0 // Rayon plus grand pour garantir le blocage
+        };
+        
+        // Ajouter à la scène et aux obstacles
+        scene.add(fbx);
+        scene.add(collisionObject);
+        obstacleObjects.push(collisionObject);
+        
+        // Référence croisée pour pouvoir nettoyer plus tard si nécessaire
         fbx.userData = {
             type: 'cactus',
             isObstacle: true,
-            collisionRadius: 1
+            collisionObject: collisionObject
         };
         
-        scene.add(fbx);
-        obstacleObjects.push(fbx);
     }, undefined, (error) => {
         console.error('Erreur lors du chargement du modèle de cactus:', error);
         
         // Modèle de secours (au cas où le chargement échoue)
         const cactusGroup = new THREE.Group();
         
-        // Corps principal
-        const bodyGeometry = new THREE.CylinderGeometry(0.3, 0.4, 2, 8);
+        // Corps principal - plus grand
+        const bodyGeometry = new THREE.CylinderGeometry(0.4, 0.5, 2.5, 8);
         const cactusMaterial = new THREE.MeshStandardMaterial({ color: 0x2A7E19 });
         const body = new THREE.Mesh(bodyGeometry, cactusMaterial);
-        body.position.y = 1;
+        body.position.y = 1.25;
         cactusGroup.add(body);
         
-        // Bras
-        const armGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
+        // Bras - plus grands
+        const armGeometry = new THREE.CylinderGeometry(0.25, 0.25, 1.2, 8);
         const arm1 = new THREE.Mesh(armGeometry, cactusMaterial);
-        arm1.position.set(0.5, 1.2, 0);
+        arm1.position.set(0.6, 1.4, 0);
         arm1.rotation.z = Math.PI / 4;
         cactusGroup.add(arm1);
         
         const arm2 = new THREE.Mesh(armGeometry, cactusMaterial);
-        arm2.position.set(-0.5, 1.5, 0);
+        arm2.position.set(-0.6, 1.7, 0);
         arm2.rotation.z = -Math.PI / 4;
         cactusGroup.add(arm2);
         
@@ -752,16 +961,28 @@ function createCactus(x, y, z) {
             }
         });
         
-        // Positionnement et données utilisateur
-        cactusGroup.position.set(x, y, z);
-        cactusGroup.userData = {
-            type: 'cactus',
+        // Créer un objet de collision indépendant
+        const collisionGeometry = new THREE.CylinderGeometry(1.5, 1.5, 6, 8);
+        const collisionMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff0000,
+            transparent: true,
+            opacity: 0.0
+        });
+        
+        const collisionObject = new THREE.Mesh(collisionGeometry, collisionMaterial);
+        collisionObject.position.set(x, 3, z);
+        
+        collisionObject.userData = {
+            type: 'cactus_collision',
             isObstacle: true,
-            collisionRadius: 1
+            collisionRadius: 2.0
         };
         
+        // Positionnement et ajouter à la scène
+        cactusGroup.position.set(x, y, z);
         scene.add(cactusGroup);
-        obstacleObjects.push(cactusGroup);
+        scene.add(collisionObject);
+        obstacleObjects.push(collisionObject);
     });
 }
 
@@ -797,6 +1018,7 @@ function createDesertRock(x, y, z) {
 
 // Créer une dune de sable (élément décoratif)
 function createDune(x, y, z) {
+    // Créer la dune visuellement
     const duneGeometry = new THREE.SphereGeometry(2, 8, 8, 0, Math.PI * 2, 0, Math.PI * 0.3);
     const duneMaterial = new THREE.MeshStandardMaterial({ 
         color: 0xE6C99F, // Sable clair
@@ -804,24 +1026,39 @@ function createDune(x, y, z) {
         metalness: 0
     });
     const dune = new THREE.Mesh(duneGeometry, duneMaterial);
-    dune.position.set(x, y - 0.5, z);
+    
+    // Ajuster la position pour qu'elle soit bien au niveau du sol
+    dune.position.set(x, 0, z); // y à 0 au lieu de y-0.5
     dune.rotation.set(0, Math.random() * Math.PI * 2, 0);
     dune.receiveShadow = true;
     scene.add(dune);
     
-    // Créer un objet de collision pour les dunes
-    const collisionGeometry = new THREE.BoxGeometry(2.5, 0.3, 2.5);
+    // Créer un objet de collision plus grand et plus épais pour les dunes
+    const collisionGeometry = new THREE.BoxGeometry(3.5, 0.8, 3.5); // Plus grand et plus épais
     const collisionMaterial = new THREE.MeshBasicMaterial({ 
         color: 0xff0000,
         transparent: true,
         opacity: 0.0 // Invisible
     });
     const collisionObject = new THREE.Mesh(collisionGeometry, collisionMaterial);
-    collisionObject.position.set(x, y - 0.3, z);
+    
+    // Positionner l'objet de collision à moitié dans le sol pour bloquer complètement
+    collisionObject.position.set(x, 0.4, z);
     scene.add(collisionObject);
+    
+    // Créer un groupe pour rassembler la dune et son objet de collision
+    const duneGroup = new THREE.Group();
+    duneGroup.add(dune);
+    duneGroup.add(collisionObject);
+    duneGroup.userData = {
+        type: 'dune',
+        isObstacle: true
+    };
     
     // Ajouter à la liste des obstacles
     obstacleObjects.push(collisionObject);
+    
+    return duneGroup;
 }
 
 // Créer une stalagmite (pour la grotte)
@@ -1789,10 +2026,9 @@ function animate() {
     updateEnemies();
     
     // Mettre à jour explicitement les animations des ennemis
-    // Cette boucle est importante pour s'assurer que toutes les animations sont mises à jour même si updateEnemies ne les traite pas
     enemies.forEach(enemy => {
         if (enemy.userData && enemy.userData.mixer) {
-            enemy.userData.mixer.update(0.016);
+            enemy.userData.mixer.update(ANIMATION_DELTA);
         }
     });
     
@@ -1803,7 +2039,7 @@ function animate() {
     
     // Mettre à jour les animations du personnage principal
     if (mixer) {
-        mixer.update(0.016); // Mise à jour avec un pas de temps fixe (environ 60 FPS)
+        mixer.update(ANIMATION_DELTA);
     }
     
     controls.update();
@@ -1844,25 +2080,39 @@ function checkObstacleCollisions() {
         // Si l'obstacle n'existe plus, passer au suivant
         if (!obstacle || !obstacle.parent) continue;
         
+        // Déterminer le rayon de collision
+        let collisionRadius = 1.0; // Valeur par défaut
+        
+        // Utiliser le rayon de collision spécifique s'il existe
+        if (obstacle.userData && obstacle.userData.collisionRadius) {
+            collisionRadius = obstacle.userData.collisionRadius;
+        } else if (obstacle.parent && obstacle.parent.userData && obstacle.parent.userData.collisionRadius) {
+            // Si l'obstacle est un enfant, vérifier le parent
+            collisionRadius = obstacle.parent.userData.collisionRadius;
+        }
+        
+        // Calculer la distance entre le personnage et l'obstacle
+        const distance = character.position.distanceTo(obstacle.position);
+        
         // Si le personnage est en collision avec l'obstacle
-        if (checkCollision(character, obstacle, 1.0)) {
+        if (distance < collisionRadius) {
             // Calculer la direction de l'obstacle vers le personnage
             const direction = new THREE.Vector3();
             direction.subVectors(character.position, obstacle.position).normalize();
             
-            // Repousser le personnage
+            // Repousser le personnage de manière plus forte
             character.position.copy(previousPosition);
             
-            // Petite correction pour éviter de rester bloqué
-            character.position.x += direction.x * 0.2;
-            character.position.z += direction.z * 0.2;
+            // Déplacement plus important pour éviter de rester bloqué
+            character.position.x += direction.x * 0.5;
+            character.position.z += direction.z * 0.5;
             
             // Mettre à jour la cible des contrôles
             if (controls && controls.target) {
                 controls.target.copy(character.position);
             }
             
-            // Sortir dès qu'une collision est détectée pour éviter de traiter les autres
+            // Sortir dès qu'une collision est détectée
             return;
         }
     }
@@ -2040,13 +2290,16 @@ function startNextWave() {
     // Mettre à jour l'affichage du score
     updateScoreDisplay();
     
-    // Faire apparaître les ennemis
-    for (let i = 0; i < enemiesPerWave; i++) {
-        // Ajouter un délai pour que les ennemis apparaissent progressivement
-        setTimeout(() => {
-            spawnEnemy();
-        }, i * 500); // 500ms entre chaque apparition
-    }
+    // Précharger les modèles avant de faire apparaître les ennemis
+    preloadEnemyModels(() => {
+        // Faire apparaître les ennemis
+        for (let i = 0; i < enemiesPerWave; i++) {
+            // Ajouter un délai pour que les ennemis apparaissent progressivement
+            setTimeout(() => {
+                spawnEnemy();
+            }, i * 500); // 500ms entre chaque apparition
+        }
+    });
 }
 
 // Afficher un message temporaire au centre de l'écran
@@ -2078,19 +2331,57 @@ function showWaveMessage(message, duration) {
     }, duration);
 }
 
-// Créer et faire apparaître un ennemi
+// Mise à jour de spawnEnemy pour utiliser le fichier WhiteclownInjured.fbx
 function spawnEnemy() {
     if (!gameStarted) return;
     
-    // Créer un loader FBX
+    // Si on est déjà en train de charger un modèle, attendre
+    if (isLoadingModels) {
+        setTimeout(() => spawnEnemy(), 500);
+        return;
+    }
+    
+    // Si le préchargement est toujours en cours, mettre en file d'attente
+    if (isEnemyModelLoading) {
+        enemyLoadingQueue++;
+        setTimeout(() => {
+            enemyLoadingQueue--;
+            spawnEnemy();
+        }, 500);
+        return;
+    }
+    
+    // Si les modèles ne sont pas encore chargés, les charger maintenant
+    if (!enemyModelCache) {
+        preloadEnemyModels(() => spawnEnemy());
+        return;
+    }
+    
+    isLoadingModels = true;
+    
+    // Chargement séquentiel pour éviter les problèmes
+    // D'abord charger le modèle de base
     const loader = new FBXLoader();
     
-    // Charger le modèle de l'ennemi (T-pose)
     loader.load('models/Whiteclown.fbx', (enemyModel) => {
-        console.log("Modèle d'ennemi chargé");
-        
-        // Ajuster l'échelle (à adapter selon vos besoins)
+        // Ajuster l'échelle
         enemyModel.scale.set(0.01, 0.01, 0.01);
+        
+        // Rendre tous les meshes visibles
+        enemyModel.traverse(child => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+                child.visible = true;
+                
+                // Matériau plus visible
+                if (child.material) {
+                    child.material.transparent = false;
+                    child.material.opacity = 1.0;
+                    child.material.needsUpdate = true;
+                }
+            }
+        });
         
         // Calculer une position de spawn aléatoire autour du joueur
         const radius = 15;
@@ -2103,76 +2394,69 @@ function spawnEnemy() {
         enemyModel.userData = {
             health: 100,
             speed: 0.03 + (waveNumber * 0.005), // Vitesse qui augmente avec les vagues
-            value: 10 * waveNumber
+            value: 10 * waveNumber,
+            animationTime: 0 // Variable pour suivre l'animation
         };
         
         // Ajouter le modèle à la scène et à la liste des ennemis
         scene.add(enemyModel);
         enemies.push(enemyModel);
         
-        // Charger l'animation de course depuis WhiteclownRun.fbx
-        loader.load('models/WhiteclownRun.fbx', (animationFBX) => {
-            console.log("Animation d'ennemi chargée");
+        // Créer un mixer d'animation pour cet ennemi
+        const mixer = new THREE.AnimationMixer(enemyModel);
+        enemyModel.userData.mixer = mixer;
+        
+        // Maintenant charger l'animation WhiteclownInjured.fbx
+        loader.load('models/WhiteclownInjured.fbx', (animationModel) => {
+            console.log("Animation 'WhiteclownInjured' chargée");
             
-            // Créer un AnimationMixer pour l'ennemi
-            const enemyMixer = new THREE.AnimationMixer(enemyModel);
-            enemyModel.userData.mixer = enemyMixer;
-            
-            // Vérifier et jouer la première animation trouvée
-            if (animationFBX.animations && animationFBX.animations.length > 0) {
-                console.log(`${animationFBX.animations.length} animations trouvées`);
-                const runAction = enemyMixer.clipAction(animationFBX.animations[0]);
-                runAction.play();
+            // Vérifier si l'animation a des animations
+            if (animationModel.animations && animationModel.animations.length > 0) {
+                console.log(`Nombre d'animations trouvées: ${animationModel.animations.length}`);
+                
+                // Jouer l'animation
+                const action = mixer.clipAction(animationModel.animations[0]);
+                action.setLoop(THREE.LoopRepeat);
+                action.play();
             } else {
-                // Essayer d'extraire l'animation du modèle entier
-                if (animationFBX.animations === undefined) {
-                    // Chercher dans les enfants
-                    const allAnimations = [];
-                    
-                    if (animationFBX.children) {
-                        animationFBX.traverse((child) => {
-                            if (child.animations && child.animations.length > 0) {
-                                console.log(`Animations trouvées dans un enfant: ${child.animations.length}`);
-                                allAnimations.push(...child.animations);
-                            }
-                        });
+                console.log("Recherche d'animations dans les enfants...");
+                // Chercher des animations dans les enfants
+                let animations = [];
+                
+                // Parcourir tous les enfants pour trouver des animations
+                animationModel.traverse((child) => {
+                    if (child.animations && child.animations.length > 0) {
+                        console.log(`Animations trouvées dans un enfant: ${child.animations.length}`);
+                        animations = animations.concat(child.animations);
                     }
+                });
+                
+                // Si des animations ont été trouvées, utiliser la première
+                if (animations.length > 0) {
+                    console.log(`Total des animations trouvées: ${animations.length}`);
+                    const action = mixer.clipAction(animations[0]);
+                    action.setLoop(THREE.LoopRepeat);
+                    action.play();
+                } else {
+                    console.log("Aucune animation trouvée.");
                     
-                    if (allAnimations.length > 0) {
-                        const runAction = enemyMixer.clipAction(allAnimations[0]);
-                        runAction.play();
-                    } else {
-                        console.error("Aucune animation trouvée dans models/WhiteclownRun.fbx");
-                    }
+                    // Si aucune animation n'est trouvée, utiliser l'animation manuelle de secours
+                    enemyModel.userData.useManualAnimation = true;
                 }
             }
-        }, undefined, (error) => {
-            console.error('Erreur lors du chargement de models/WhiteclownRun.fbx:', error);
             
-            // Essayer avec un autre fichier d'animation comme fallback
-            loader.load('models/WhiteclownInjured.fbx', (animationFBX) => {
-                console.log("Animation d'ennemi (fallback) chargée");
-                
-                // Créer un AnimationMixer pour l'ennemi
-                const enemyMixer = new THREE.AnimationMixer(enemyModel);
-                enemyModel.userData.mixer = enemyMixer;
-                
-                if (animationFBX.animations && animationFBX.animations.length > 0) {
-                    const runAction = enemyMixer.clipAction(animationFBX.animations[0]);
-                    runAction.play();
-                } else {
-                    console.error("Aucune animation trouvée dans le fallback");
-                }
-            }, undefined, (fallbackError) => {
-                console.error('Erreur lors du chargement de l\'animation fallback:', fallbackError);
-            });
+            isLoadingModels = false;
+        }, undefined, (error) => {
+            console.error("Erreur lors du chargement de l'animation:", error);
+            // En cas d'erreur, utiliser l'animation manuelle
+            enemyModel.userData.useManualAnimation = true;
+            isLoadingModels = false;
         });
     }, undefined, (error) => {
-        console.error('Erreur lors du chargement de models/Whiteclown.fbx:', error);
+        console.error('Erreur lors du chargement du modèle:', error);
+        isLoadingModels = false;
     });
 }
-
-
 
 // Mettre à jour les ennemis (mouvement, etc.)
 function updateEnemies() {
@@ -2186,12 +2470,77 @@ function updateEnemies() {
         const direction = new THREE.Vector3();
         direction.subVectors(character.position, enemy.position).normalize();
         
+        // Sauvegarder la position précédente pour pouvoir revenir en arrière en cas de collision
+        const previousPosition = enemy.position.clone();
+        
         // Déplacer l'ennemi vers le joueur
         enemy.position.x += direction.x * enemy.userData.speed;
         enemy.position.z += direction.z * enemy.userData.speed;
         
-        // Maintenir la hauteur Y
-        enemy.position.y = 0.4;
+        // Vérifier les collisions avec les autres ennemis
+        let hasCollision = false;
+        for (let j = 0; j < enemies.length; j++) {
+            if (i !== j) { // Ne pas vérifier la collision avec soi-même
+                const otherEnemy = enemies[j];
+                const distance = enemy.position.distanceTo(otherEnemy.position);
+                
+                // Utiliser un seuil de collision approprié (la somme des rayons des ennemis)
+                const collisionThreshold = 1.0; // Ajustez selon la taille de vos ennemis
+                
+                if (distance < collisionThreshold) {
+                    hasCollision = true;
+                    
+                    // Calculer une direction de répulsion
+                    const repulsionDirection = new THREE.Vector3();
+                    repulsionDirection.subVectors(enemy.position, otherEnemy.position).normalize();
+                    
+                    // Appliquer une répulsion - déplacer les deux ennemis pour les séparer
+                    enemy.position.x += repulsionDirection.x * 0.05;
+                    enemy.position.z += repulsionDirection.z * 0.05;
+                    
+                    // Optionnel: déplacer légèrement l'autre ennemi dans la direction opposée
+                    otherEnemy.position.x -= repulsionDirection.x * 0.05;
+                    otherEnemy.position.z -= repulsionDirection.z * 0.05;
+                }
+            }
+        }
+        
+        // Animation
+        if (enemy.userData) {
+            // Incrémenter le temps d'animation
+            enemy.userData.animationTime += ANIMATION_DELTA;
+            
+            if (enemy.userData.useManualAnimation) {
+                // Animation manuelle de secours si l'animation par fichier a échoué
+                // Oscillation de base pour simuler le mouvement
+                const baseY = 0.4;
+                const amplitude = 0.05;
+                const frequency = 5; // Hz
+                
+                // Calculer la hauteur en fonction du temps
+                const animatedY = baseY + amplitude * Math.sin(enemy.userData.animationTime * frequency);
+                
+                // Appliquer la hauteur animée
+                enemy.position.y = animatedY;
+                
+                // Légère oscillation de rotation pour simuler le balancement
+                const rotAmplitude = 0.03;
+                enemy.rotation.z = rotAmplitude * Math.sin(enemy.userData.animationTime * frequency * 2);
+                
+                // Légère oscillation avant-arrière
+                const forwardBackAmplitude = 0.02;
+                enemy.rotation.x = forwardBackAmplitude * Math.sin(enemy.userData.animationTime * frequency);
+            } else {
+                // Animation par fichier
+                // Maintenir une hauteur fixe
+                enemy.position.y = 0.4;
+                
+                // Mettre à jour le mixer d'animation
+                if (enemy.userData.mixer) {
+                    enemy.userData.mixer.update(ANIMATION_DELTA);
+                }
+            }
+        }
         
         // Orienter l'ennemi vers le joueur
         enemy.rotation.y = Math.atan2(direction.x, direction.z);
@@ -2225,11 +2574,6 @@ function updateEnemies() {
                 enemy.position.x -= direction.x * 0.1;
                 enemy.position.z -= direction.z * 0.1;
             }
-        }
-        
-        // Mettre à jour l'animation de l'ennemi
-        if (enemy.userData && enemy.userData.mixer) {
-            enemy.userData.mixer.update(0.016); // 60 FPS
         }
     }
 }
@@ -4308,10 +4652,13 @@ function updateHealthBar() {
         // Calculer le pourcentage de vie
         const healthPercent = (currentHealth / playerHealth) * 100;
         
+        // Animation fluide de la barre de vie
+        healthFill.style.transition = 'width 0.4s ease-out, background-color 0.4s';
+        
         // Mettre à jour la largeur de la barre
         healthFill.style.width = `${healthPercent}%`;
         
-        // Changer la couleur en fonction de la vie restante
+        // Changer la couleur en fonction de la vie restante avec une transition fluide
         if (healthPercent > 60) {
             healthFill.style.backgroundColor = '#2ecc71'; // Vert
         } else if (healthPercent > 30) {
@@ -4320,8 +4667,32 @@ function updateHealthBar() {
             healthFill.style.backgroundColor = '#e74c3c'; // Rouge
         }
         
-        // Mettre à jour le texte
-        healthText.textContent = `${currentHealth}/${playerHealth}`;
+        // Ajouter un effet de pulsation quand la vie est basse
+        if (healthPercent <= 25) {
+            healthFill.style.animation = 'pulse 1.5s infinite';
+            if (!document.getElementById('health-pulse-style')) {
+                const style = document.createElement('style');
+                style.id = 'health-pulse-style';
+                style.textContent = `
+                    @keyframes pulse {
+                        0% { opacity: 1; }
+                        50% { opacity: 0.6; }
+                        100% { opacity: 1; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+        } else {
+            healthFill.style.animation = 'none';
+        }
+        
+        // Mettre à jour le texte avec animation
+        healthText.textContent = `${Math.ceil(currentHealth)}/${playerHealth}`;
+        healthText.style.transition = 'transform 0.2s ease-out';
+        healthText.style.transform = 'scale(1.1)';
+        setTimeout(() => {
+            healthText.style.transform = 'scale(1)';
+        }, 200);
     }
 }
 
@@ -4333,23 +4704,29 @@ function damagePlayer(amount) {
     // Activer l'invulnérabilité temporaire
     isPlayerInvulnerable = true;
     
-    // Réduire la santé
-    currentHealth = Math.max(0, currentHealth - amount);
+    // Effet sonore de dégâts (si disponible)
+    if (window.soundEffects && window.soundEffects.playerHit) {
+        window.soundEffects.playerHit.currentTime = 0;
+        window.soundEffects.playerHit.play().catch(e => console.log("Erreur lecture audio:", e));
+    }
     
-    // Mettre à jour la barre de vie
+    // Réduire la santé immédiatement (correction du bug)
+    currentHealth = Math.max(0, currentHealth - amount);
     updateHealthBar();
     
-    // Effet visuel de dégâts (secouer la caméra)
+    // Afficher des effets visuels pour les dégâts
     if (camera) {
         const initialPosition = camera.position.clone();
+        const intensity = amount / playerHealth * 0.5; // Intensité basée sur les dégâts
+        
         const shake = () => {
-            camera.position.x = initialPosition.x + (Math.random() - 0.5) * 0.2;
-            camera.position.y = initialPosition.y + (Math.random() - 0.5) * 0.2;
-            camera.position.z = initialPosition.z + (Math.random() - 0.5) * 0.2;
+            camera.position.x = initialPosition.x + (Math.random() - 0.5) * intensity;
+            camera.position.y = initialPosition.y + (Math.random() - 0.5) * intensity;
+            camera.position.z = initialPosition.z + (Math.random() - 0.5) * intensity;
         };
         
         // Secouer pendant 500ms
-        const shakeInterval = setInterval(shake, 50);
+        const shakeInterval = setInterval(shake, 40);
         setTimeout(() => {
             clearInterval(shakeInterval);
             camera.position.copy(initialPosition);
@@ -4367,21 +4744,89 @@ function damagePlayer(amount) {
         damageFlash.style.left = '0';
         damageFlash.style.width = '100%';
         damageFlash.style.height = '100%';
-        damageFlash.style.backgroundColor = 'rgba(255, 0, 0, 0.3)';
+        damageFlash.style.backgroundColor = `rgba(255, 0, 0, ${Math.min(0.6, amount / playerHealth + 0.3)})`;
         damageFlash.style.zIndex = '9999';
         damageFlash.style.pointerEvents = 'none';
+        damageFlash.style.boxShadow = 'inset 0 0 50px rgba(200, 0, 0, 0.8)';
+        damageFlash.style.transition = 'opacity 0.6s ease-out';
         document.body.appendChild(damageFlash);
         
-        // Faire disparaître le flash après 300ms
+        // Ajouter un effet vignette pour plus d'impact
+        const vignette = document.createElement('div');
+        vignette.style.position = 'fixed';
+        vignette.style.top = '0';
+        vignette.style.left = '0';
+        vignette.style.width = '100%';
+        vignette.style.height = '100%';
+        vignette.style.pointerEvents = 'none';
+        vignette.style.zIndex = '9998';
+        vignette.style.boxShadow = 'inset 0 0 150px rgba(255, 0, 0, 0.7)';
+        vignette.style.opacity = '0.7';
+        vignette.style.transition = 'opacity 1.2s ease-out';
+        document.body.appendChild(vignette);
+        
+        // Effet de pulsation sur le personnage pour indiquer les dégâts
+        if (character) {
+            // Clignotement rouge sur le modèle du personnage
+            character.traverse(obj => {
+                if (obj.isMesh && obj.material) {
+                    obj.userData.originalColor = obj.material.color.clone();
+                    obj.material.color.set(0xff0000);
+                    obj.material.needsUpdate = true;
+                }
+            });
+            
+            // Séquence de clignotement
+            let blinkCount = 0;
+            const maxBlinks = 3;
+            const blinkInterval = setInterval(() => {
+                blinkCount++;
+                character.traverse(obj => {
+                    if (obj.isMesh && obj.material) {
+                        if (blinkCount % 2 === 0) {
+                            // Restaurer la couleur originale
+                            if (obj.userData.originalColor) {
+                                obj.material.color.copy(obj.userData.originalColor);
+                            }
+                        } else {
+                            // Couleur rouge
+                            obj.material.color.set(0xff0000);
+                        }
+                        obj.material.needsUpdate = true;
+                    }
+                });
+                
+                if (blinkCount >= maxBlinks * 2) {
+                    clearInterval(blinkInterval);
+                    // Restaurer définitivement les couleurs originales
+                    character.traverse(obj => {
+                        if (obj.isMesh && obj.material && obj.userData.originalColor) {
+                            obj.material.color.copy(obj.userData.originalColor);
+                            obj.material.needsUpdate = true;
+                        }
+                    });
+                }
+            }, 150);
+        }
+        
+        // Faire disparaître les effets visuels progressivement
         setTimeout(() => {
-            damageFlash.style.transition = 'opacity 0.3s';
             damageFlash.style.opacity = '0';
             setTimeout(() => {
-                document.body.removeChild(damageFlash);
-            }, 300);
-        }, 300);
+                if (damageFlash.parentNode) {
+                    document.body.removeChild(damageFlash);
+                }
+            }, 600);
+            
+            vignette.style.opacity = '0';
+            setTimeout(() => {
+                if (vignette.parentNode) {
+                    document.body.removeChild(vignette);
+                }
+            }, 1200);
+        }, 100);
         
-        // Désactiver l'invulnérabilité après 1 seconde
+        // Désactiver l'invulnérabilité après un délai
         setTimeout(() => {
             isPlayerInvulnerable = false;
         }, 1000);
@@ -4753,4 +5198,42 @@ function confirmQuit() {
     
     // Ajouter la fenêtre au document
     document.body.appendChild(confirmDialog);
+}
+
+// Précharger les modèles d'ennemis une seule fois
+function preloadEnemyModels(callback) {
+    // Si le modèle est déjà chargé ou en cours de chargement, ne rien faire
+    if (enemyModelCache || isEnemyModelLoading) {
+        if (callback) callback();
+        return;
+    }
+    
+    isEnemyModelLoading = true;
+    console.log("Préchargement des modèles d'ennemis...");
+    
+    const loader = new FBXLoader();
+    
+    // Charger le modèle principal
+    loader.load('models/Whiteclown.fbx', (model) => {
+        // Configurer correctement le modèle avant de le mettre en cache
+        model.scale.set(0.01, 0.01, 0.01);
+        model.traverse(child => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+        
+        enemyModelCache = model;
+        console.log("Modèle d'ennemi préchargé");
+        
+        // Ne pas essayer de précharger l'animation qui cause des erreurs
+        isEnemyModelLoading = false;
+        if (callback) callback();
+    }, undefined, (error) => {
+        console.error('Erreur lors du préchargement du modèle:', error);
+        isEnemyModelLoading = false;
+        
+        if (callback) callback();
+    });
 }
