@@ -6,71 +6,6 @@ import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as UI from './ui.js';
 
-// Fonction de diagnostic pour aider à déboguer les problèmes de chargement
-function diagnosticModels() {
-  console.log("=== DIAGNOSTIC DES MODÈLES FBX ===");
-  
-  // Vérifier si fetch est disponible
-  if (typeof fetch === 'function') {
-    console.log("Tentative de vérification des fichiers de modèles...");
-    
-    // Test d'accès au fichier principal utilisé
-    fetch('/models/ecureuilSama.fbx')
-      .then(response => {
-        if (response.ok) {
-          console.log("✅ Le fichier ecureuilSama.fbx est accessible.");
-          return response.blob();
-        } else {
-          console.error("❌ Le fichier ecureuilSama.fbx n'est pas accessible:", response.status, response.statusText);
-          throw new Error(`Fichier non trouvé: ${response.status} ${response.statusText}`);
-        }
-      })
-      .then(blob => {
-        console.log("Taille du fichier FBX:", (blob.size / 1024).toFixed(2), "KB");
-        // Vérifier si la taille est raisonnable (> 1KB)
-        if (blob.size < 1024) {
-          console.warn("⚠️ Le fichier FBX semble trop petit, il pourrait être corrompu");
-        }
-      })
-      .catch(error => {
-        console.error("Erreur lors de la vérification du modèle:", error);
-      });
-    
-    // Vérifier le dossier models
-    fetch('/check-models')
-      .then(response => response.json())
-      .then(data => {
-        console.log("Résultat du check-models:", data);
-      })
-      .catch(error => {
-        console.error("Impossible de vérifier les modèles via l'API:", error);
-      });
-  } else {
-    console.log("fetch API n'est pas disponible dans cet environnement");
-  }
-  
-  // Tester un chargement direct
-  try {
-    const loader = new FBXLoader();
-    console.log("Loader FBX créé avec succès");
-    
-    // Modifier le chemin d'accès pour tester différentes variantes
-    const modelPath = '/models/ecureuilSama.fbx'; // Avec slash au début
-    console.log("Tentative de chargement du modèle depuis:", modelPath);
-    
-    loader.load(
-      modelPath,
-      (model) => console.log("✅ Modèle chargé avec succès"),
-      (progress) => console.log("Progression:", (progress.loaded / progress.total * 100).toFixed(0), "%"),
-      (error) => console.error("❌ Erreur de chargement du modèle direct:", error)
-    );
-  } catch (error) {
-    console.error("Exception lors de la création du loader ou du chargement:", error);
-  }
-  
-  console.log("=== FIN DU DIAGNOSTIC ===");
-}
-
 // Vérifier si on est dans un environnement navigateur ou Node.js
 // Si on est dans Node.js (comme sur Render), créer un simili-localStorage
 if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
@@ -146,6 +81,7 @@ let animationFrameId = null;
 let gameOver = false;
 let isMainMenuVisible = true; // Menu principal visible au démarrage
 let mainMenuElement = null, mapSelectionElement = null;
+let pauseMenuElement = null; // Élément DOM du menu pause
 let controlsElement, aboutElement; // Variables pour les écrans de contrôles et à propos
 let selectedSpell = 'fireball';
 let keysPressed = {};
@@ -155,6 +91,9 @@ let unlockedMaps = ['forest']; // Maps débloquées (au début seulement la for�
 let mapHighScores = { forest: 0, desert: 0, cave: 0 }; // Meilleurs scores par map
 const MAP_UNLOCK_THRESHOLDS = { desert: 5000, cave: 10000 }; // Seuils de déblocage
 const ANIMATION_DELTA = 0.016; // Temps delta fixe pour les animations (environ 60 FPS)
+let meteoritesActive = false; // Variable pour indiquer si les météorites sont actives
+let meteorites = []; // Tableau pour stocker les météorites
+let meteoriteInterval = null; // Intervalle pour faire apparaître des météorites
 
 // Préchargement des modèles et animations d'ennemis
 let enemyModelCache = null;
@@ -451,13 +390,6 @@ function createGround() {
     ground.rotation.x = -Math.PI / 2; // Rotation pour le mettre à plat
     ground.receiveShadow = true;
     scene.add(ground);
-    
-    // Grille de référence (optionnelle)
-    const gridHelper = new THREE.GridHelper(30, 30, 0x000000, 0x000000);
-    gridHelper.position.y = 0.01; // Légèrement au-dessus du sol pour éviter le z-fighting
-    gridHelper.material.opacity = 0.2;
-    gridHelper.material.transparent = true;
-    scene.add(gridHelper);
 }
 
 // Créer des éléments de décor selon le type de map
@@ -1928,7 +1860,7 @@ function onKeyDown(event) {
         case 'ArrowRight':
             moveRight = true;
             break;
-            
+        
         // Touche F pour lancer une boule de feu
         case 'KeyF':
             if (!isPaused) {
@@ -1937,13 +1869,11 @@ function onKeyDown(event) {
             }
             break;
         
-        // Touche D pour afficher les os du modèle (debug)
+        // Touche G pour le mode debug
         case 'KeyG':
             if (!isPaused) {
-                console.log('Affichage des os du modèle');
-                if (character) {
-                    debugBones();
-                }
+                showBones = !showBones;
+                console.log('Mode affichage des os:', showBones ? 'Activé' : 'Désactivé');
             }
             break;
         
@@ -2041,45 +1971,6 @@ function updateMovementState() {
     }
 }
 
-// Fonction de débogage pour afficher tous les os du modèle
-function debugBones() {
-    if (!character) return;
-    
-    console.log('Liste des os du modèle:');
-    let boneCount = 0;
-    
-    character.traverse((child) => {
-        if (child.isBone) {
-            boneCount++;
-            console.log(`Os #${boneCount}: "${child.name}"`);
-            
-            // Visualiser la position de l'os avec un petit cube
-            const marker = new THREE.Mesh(
-                new THREE.BoxGeometry(0.05, 0.05, 0.05),
-                new THREE.MeshBasicMaterial({ color: 0xff0000 })
-            );
-            
-            // Obtenir la position mondiale de l'os
-            const position = new THREE.Vector3();
-            child.getWorldPosition(position);
-            marker.position.copy(position);
-            
-            // Ajouter un texte pour identifier l'os
-            scene.add(marker);
-            
-            // Si c'est un os qui ressemble à une main, le colorer différemment
-            if (child.name.toLowerCase().includes('hand') || 
-                child.name.toLowerCase().includes('main') || 
-                child.name.toLowerCase().includes('palm')) {
-                marker.material.color.set(0x00ff00); // Vert pour les mains
-                marker.scale.set(0.1, 0.1, 0.1); // Plus grand pour mieux voir
-            }
-        }
-    });
-    
-    console.log(`Total: ${boneCount} os trouvés`);
-}
-
 // Gestion du redimensionnement
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -2163,6 +2054,9 @@ function animate() {
     
     // Mettre à jour les ennemis
     updateEnemies();
+    
+    // Mettre à jour les météorites
+    updateMeteorites();
     
     // Mettre à jour explicitement les animations des ennemis
     enemies.forEach(enemy => {
@@ -2428,6 +2322,13 @@ function startNextWave() {
     
     // Mettre à jour l'affichage du score
     updateScoreDisplay();
+    
+    // Activer les météorites à partir de la vague 5
+    if (waveNumber >= 5 && !meteoritesActive) {
+        meteoritesActive = true;
+        startMeteoriteRain();
+        showWaveMessage("Attention! Pluie de météorites!", 3000);
+    }
     
     // Précharger les modèles avant de faire apparaître les ennemis
     preloadEnemyModels(() => {
@@ -4761,7 +4662,7 @@ function playerDeath() {
         document.body.removeChild(gameOverElement);
         // Réinitialiser la santé pour la prochaine partie
         currentHealth = playerHealth;
-        showMainMenu();
+        window.location.reload();
     });
     menuButton.style.margin = '10px auto';
     gameOverElement.appendChild(menuButton);
@@ -5019,9 +4920,8 @@ function confirmQuit() {
     confirmDialog.style.zIndex = '6000';
     confirmDialog.style.textAlign = 'center';
     
-    // Ajouter le message
     const message = document.createElement('p');
-    message.textContent = 'Êtes-vous sûr de vouloir quitter la partie ? Votre score actuel sera sauvegardé.';
+    message.textContent = 'Êtes-vous sûr de vouloir quitter la partie ?';
     message.style.marginBottom = '30px';
     message.style.fontSize = '16px';
     confirmDialog.appendChild(message);
@@ -5031,62 +4931,43 @@ function confirmQuit() {
     buttonsContainer.style.display = 'flex';
     buttonsContainer.style.justifyContent = 'space-around';
     
-    // Bouton Oui
-    const yesButton = document.createElement('div');
-    yesButton.textContent = 'Oui';
-    yesButton.style.backgroundColor = '#e74c3c';
-    yesButton.style.color = 'white';
-    yesButton.style.padding = '10px 30px';
-    yesButton.style.textAlign = 'center';
-    yesButton.style.borderRadius = '5px';
-    yesButton.style.cursor = 'pointer';
-    
-    yesButton.onmouseenter = () => {
-        yesButton.style.backgroundColor = '#c0392b';
-    };
-    
-    yesButton.onmouseleave = () => {
-        yesButton.style.backgroundColor = '#e74c3c';
-    };
-    
-    yesButton.onclick = () => {
-        // Sauvegarder le score avant de quitter
-        updateMapScore();
-        saveProgress();
-        
+    // Bouton "Non" : ferme la confirmation
+    const noButton = createMenuButton('Non', () => {
         document.body.removeChild(confirmDialog);
-        showMainMenu();
-    };
-    
-    // Bouton Non
-    const noButton = document.createElement('div');
-    noButton.textContent = 'Non';
-    noButton.style.backgroundColor = '#3498db';
-    noButton.style.color = 'white';
-    noButton.style.padding = '10px 30px';
-    noButton.style.textAlign = 'center';
-    noButton.style.borderRadius = '5px';
-    noButton.style.cursor = 'pointer';
-    
-    noButton.onmouseenter = () => {
-        noButton.style.backgroundColor = '#2980b9';
-    };
-    
-    noButton.onmouseleave = () => {
-        noButton.style.backgroundColor = '#3498db';
-    };
-    
-    noButton.onclick = () => {
+    });
+    // Bouton "Oui" : quitte réellement le jeu
+    const yesButton = createMenuButton('Oui', () => {
         document.body.removeChild(confirmDialog);
-    };
-    
-    buttonsContainer.appendChild(noButton); // Non en premier (gauche)
-    buttonsContainer.appendChild(yesButton); // Oui en second (droite)
-    
+        quitGame();
+    });
+
+    buttonsContainer.appendChild(noButton);
+    buttonsContainer.appendChild(yesButton);
     confirmDialog.appendChild(buttonsContainer);
-    
-    // Ajouter la fenêtre au document
+
     document.body.appendChild(confirmDialog);
+}
+
+// Fonction qui "quitte" réellement le jeu
+function quitGame() {
+    // Annuler la boucle d'animation
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+    
+    // Supprimer les écouteurs d'événements pour stopper toute interaction
+    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('mousemove', onMouseMove);
+
+    // Optionnel : retirer le canvas du renderer du DOM
+    if (renderer && renderer.domElement && renderer.domElement.parentNode) {
+        renderer.domElement.parentNode.removeChild(renderer.domElement);
+    }
+    
+    // Rafraîchir la page automatiquement
+    window.location.reload();
 }
 
 // Précharger les modèles d'ennemis une seule fois
@@ -5125,4 +5006,193 @@ function preloadEnemyModels(callback) {
         
         if (callback) callback();
     });
+}
+
+// Créer et lancer une météorite
+function createMeteorite() {
+    // Créer une géométrie pour la météorite
+    const size = Math.random() * 0.5 + 0.3; // Taille aléatoire entre 0.3 et 0.8
+    const geometry = new THREE.IcosahedronGeometry(size, 1); // Forme irrégulière
+    
+    // Créer un matériau pour la météorite
+    const material = new THREE.MeshStandardMaterial({
+        color: 0x333333,
+        roughness: 0.9,
+        metalness: 0.5,
+        emissive: 0x330000,
+        emissiveIntensity: 0.5
+    });
+    
+    // Créer le mesh de la météorite
+    const meteorite = new THREE.Mesh(geometry, material);
+    
+    // Positionner aléatoirement la météorite en hauteur
+    const mapSize = 12; // Taille approximative de la zone de jeu
+    const x = (Math.random() * mapSize * 2) - mapSize;
+    const z = (Math.random() * mapSize * 2) - mapSize;
+    const y = 20; // Hauteur de départ
+    
+    meteorite.position.set(x, y, z);
+    
+    // Ajouter une traînée de feu (système de particules simplifié)
+    const fireTrail = new THREE.PointLight(0xff5500, 2, 4);
+    fireTrail.position.copy(meteorite.position);
+    
+    // Créer un groupe pour la météorite et sa traînée
+    const meteoriteGroup = new THREE.Group();
+    meteoriteGroup.add(meteorite);
+    meteoriteGroup.add(fireTrail);
+    
+    // Propriétés de la météorite pour l'animation et les collisions
+    meteoriteGroup.userData = {
+        velocity: new THREE.Vector3(Math.random() * 0.1 - 0.05, -0.2 - Math.random() * 0.1, Math.random() * 0.1 - 0.05),
+        rotationSpeed: new THREE.Vector3(
+            Math.random() * 0.05, 
+            Math.random() * 0.05, 
+            Math.random() * 0.05
+        ),
+        damage: 15 + Math.floor(Math.random() * 10), // 15-24 dégâts
+        landed: false
+    };
+    
+    // Ajouter à la scène et au tableau des météorites
+    scene.add(meteoriteGroup);
+    meteorites.push(meteoriteGroup);
+    
+    return meteoriteGroup;
+}
+
+// Démarrer la pluie de météorites
+function startMeteoriteRain() {
+    // Arrêter l'intervalle précédent s'il existe
+    if (meteoriteInterval) {
+        clearInterval(meteoriteInterval);
+    }
+    
+    // Créer une météorite immédiatement
+    createMeteorite();
+    
+    // Définir l'intervalle pour créer des météorites régulièrement
+    // L'intervalle diminue avec le numéro de la vague pour augmenter la difficulté
+    const interval = Math.max(2000, 6000 - (waveNumber - 5) * 500); // Entre 6s et 2s selon la vague
+    
+    meteoriteInterval = setInterval(() => {
+        if (!isPaused && gameStarted && !isMainMenuVisible) {
+            createMeteorite();
+        }
+    }, interval);
+}
+
+// Mettre à jour les météorites (à ajouter dans la fonction animate)
+function updateMeteorites() {
+    if (!meteoritesActive || isPaused || !gameStarted) return;
+    
+    for (let i = meteorites.length - 1; i >= 0; i--) {
+        const meteoriteGroup = meteorites[i];
+        const meteorite = meteoriteGroup.children[0]; // Le premier enfant est la météorite
+        const fireTrail = meteoriteGroup.children[1]; // Le deuxième enfant est la traînée
+        
+        // Si la météorite a déjà atterri, passer à la suivante
+        if (meteoriteGroup.userData.landed) continue;
+        
+        // Mettre à jour la position de la météorite
+        meteorite.position.add(meteoriteGroup.userData.velocity);
+        
+        // Faire suivre la traînée
+        fireTrail.position.copy(meteorite.position);
+        
+        // Faire tourner la météorite
+        meteorite.rotation.x += meteoriteGroup.userData.rotationSpeed.x;
+        meteorite.rotation.y += meteoriteGroup.userData.rotationSpeed.y;
+        meteorite.rotation.z += meteoriteGroup.userData.rotationSpeed.z;
+        
+        // Vérifier si la météorite a atteint le sol
+        if (meteorite.position.y <= 0) {
+            // Marquer comme atterrie
+            meteoriteGroup.userData.landed = true;
+            
+            // Créer une explosion à l'impact
+            createMeteoriteImpact(meteorite.position.clone());
+            
+            // Vérifier si le joueur est proche et lui infliger des dégâts
+            if (character && meteorite.position.distanceTo(character.position) < 2.5) {
+                damagePlayer(meteoriteGroup.userData.damage);
+                
+                // Message de dégâts
+                showBonus(character.position, "-" + meteoriteGroup.userData.damage, 0xff0000);
+            }
+            
+            // Vérifier si des ennemis sont proches et leur infliger des dégâts
+            for (let j = 0; j < enemies.length; j++) {
+                if (meteorite.position.distanceTo(enemies[j].position) < 3) {
+                    // Tuer l'ennemi
+                    killEnemy(enemies[j]);
+                }
+            }
+            
+            // Supprimer la météorite et sa traînée après un court délai
+            setTimeout(() => {
+                scene.remove(meteoriteGroup);
+                const index = meteorites.indexOf(meteoriteGroup);
+                if (index !== -1) {
+                    meteorites.splice(index, 1);
+                }
+            }, 5000); // Laisser l'impact visible pendant 5 secondes
+        }
+    }
+}
+
+// Créer un effet d'impact de météorite
+function createMeteoriteImpact(position) {
+    // Créer un effet de lumière à l'impact
+    const impactLight = new THREE.PointLight(0xff9900, 5, 8);
+    impactLight.position.copy(position);
+    impactLight.position.y = 0.1; // Juste au-dessus du sol
+    scene.add(impactLight);
+    
+    // Créer un cercle d'impact sur le sol
+    const impactGeometry = new THREE.CircleGeometry(3, 32);
+    const impactMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff3300,
+        transparent: true,
+        opacity: 0.7
+    });
+    
+    const impactCircle = new THREE.Mesh(impactGeometry, impactMaterial);
+    impactCircle.rotation.x = -Math.PI / 2; // À plat sur le sol
+    impactCircle.position.copy(position);
+    impactCircle.position.y = 0.05; // Juste au-dessus du sol
+    scene.add(impactCircle);
+    
+    // Animation pour faire disparaître progressivement l'impact
+    const animate = () => {
+        impactLight.intensity *= 0.95;
+        impactMaterial.opacity *= 0.95;
+        
+        if (impactLight.intensity > 0.01) {
+            requestAnimationFrame(animate);
+        } else {
+            scene.remove(impactLight);
+            scene.remove(impactCircle);
+        }
+    };
+    
+    animate();
+    
+    return { impactLight, impactCircle };
+}
+
+// Réinitialiser l'action en cours
+function resetAction() {
+    if (idleAction && runAction && spellAction) {
+        // Réinitialiser toutes les actions
+        idleAction.stop();
+        runAction.stop();
+        spellAction.stop();
+        
+        // Démarrer l'animation d'idle
+        idleAction.reset();
+        idleAction.fadeIn(0.5);
+        idleAction.play();
+    }
 }
