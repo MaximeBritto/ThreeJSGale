@@ -1702,20 +1702,16 @@ function applyLaserDamage(laser, startPosition, direction) {
             const perpendicularDistance = enemy.position.distanceTo(projectionPoint);
             
             if (perpendicularDistance < 0.8) {
-                // Infliger des dégâts à l'ennemi
                 enemy.userData.health -= laser.userData.damagePerHit;
                 
-                // Effet visuel d'impact
                 createLaserImpactEffect(enemy.position.clone());
                 
-                // Effets de particules supplémentaires
-                if (Math.random() < 0.3) { // Uniquement 30% du temps pour éviter trop d'effets
+                if (Math.random() < 0.3) { 
                     const sparkPosition = enemy.position.clone();
                     sparkPosition.y += 0.5 * Math.random();
                     createLaserImpactEffect(sparkPosition);
                 }
                 
-                // Si l'ennemi n'a plus de vie, le supprimer
                 if (enemy.userData.health <= 0) {
                     killEnemy(enemy);
                 }
@@ -1726,7 +1722,6 @@ function applyLaserDamage(laser, startPosition, direction) {
 
 // Créer un effet d'impact pour le laser
 function createLaserImpactEffect(position) {
-    // Créer une petite sphère lumineuse pour l'impact
     const impactGeometry = new THREE.SphereGeometry(0.2, 8, 8);
     const impactMaterial = new THREE.MeshBasicMaterial({
         color: 0xff00ff,
@@ -1738,7 +1733,6 @@ function createLaserImpactEffect(position) {
     impact.position.copy(position);
     scene.add(impact);
     
-    // Animation de l'impact (expansion puis disparition)
     let scale = 1;
     
     const animate = () => {
@@ -1758,9 +1752,7 @@ function createLaserImpactEffect(position) {
 
 // Gestion des touches du clavier (appui)
 function onKeyDown(event) {
-    // Ne pas traiter les touches si on est dans un menu
     if (isMainMenuVisible) {
-        // Dans le menu principal, seul Echap est actif pour fermer les dialogues
         if (event.code === 'Escape') {
             const dialog = document.querySelector('div[style*="z-index: 6000"]');
             if (dialog) {
@@ -1771,7 +1763,6 @@ function onKeyDown(event) {
     }
     
     switch (event.code) {
-        // Déplacement
         case 'KeyW':
         case 'ArrowUp':
             moveForward = true;
@@ -1789,7 +1780,6 @@ function onKeyDown(event) {
             moveRight = true;
             break;
         
-        // Touche F pour lancer une boule de feu
         case 'KeyF':
             if (!isPaused) {
                 console.log('Lancement d\'une boule de feu');
@@ -1797,7 +1787,6 @@ function onKeyDown(event) {
             }
             break;
         
-        // Touche G pour le mode debug
         case 'KeyG':
             if (!isPaused) {
                 showBones = !showBones;
@@ -1805,7 +1794,6 @@ function onKeyDown(event) {
             }
             break;
         
-        // Touche I pour inverser la direction des boules de feu
         case 'KeyI':
             if (!isPaused) {
                 fireballFlipped = !fireballFlipped;
@@ -1888,7 +1876,6 @@ function updateMovementState() {
     // Si on arrête de se déplacer
     if (wasMoving && !isMoving) {
         if (runAction) {
-            // Faire un crossfade plus doux entre run et idle
             runAction.fadeOut(0.5);
         }
         if (idleAction) {
@@ -1920,47 +1907,33 @@ function moveCharacter() {
     
     // Si on a une direction non nulle
     if (moveDirection.length() > 0) {
-        // Normaliser la direction
         moveDirection.normalize();
         
-        // Stocker la dernière direction de mouvement, mais ne pas l'utiliser pour la rotation
-        // car maintenant la rotation est contrôlée par la souris
         if (!moveBackward) {
-            // Si on ne recule pas, utiliser la direction du mouvement
             lastDirection.copy(moveDirection);
         }
         
-        // Déplacer le personnage dans la direction des touches, indépendamment de où il regarde
         character.position.x += moveDirection.x * characterSpeed;
         character.position.z += moveDirection.z * characterSpeed;
         
-        // Conserver la hauteur Y pour éviter de traverser le sol
-        character.position.y = Math.max(character.position.y, 0.3); // Assurer qu'il reste au-dessus du sol
+        character.position.y = Math.max(character.position.y, 0.3); 
         
-        // Mettre à jour la cible des contrôles de la caméra
         controls.target.copy(character.position);
         
-        // Faire suivre la caméra au personnage avec un petit décalage
         camera.position.x = character.position.x;
         camera.position.z = character.position.z + 10;
         
-        // Définir l'état de déplacement
         isMoving = true;
     } else {
-        // Arrêter le déplacement
         isMoving = false;
     }
     
-    // Appliquer une rotation progressive vers la rotation cible (basée sur la position de la souris)
     if (character) {
-        // Calculer la différence d'angle (en tenant compte de la rotation circulaire)
         let angleDiff = targetRotation - character.rotation.y;
         
-        // Normaliser l'angle entre -PI et PI pour prendre le chemin le plus court
         while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
         while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
         
-        // Rotation progressive
         if (Math.abs(angleDiff) > 0.01) {
             character.rotation.y += angleDiff * rotationSpeed;
         } else {
@@ -1971,34 +1944,26 @@ function moveCharacter() {
 
 // Boucle d'animation
 function animate() {
-    // Stocker l'ID de l'animation pour pouvoir l'annuler en cas de pause
     animationFrameId = requestAnimationFrame(animate);
     
-    // Ne pas mettre à jour si le jeu est en pause ou si le menu principal est visible
     if (isPaused || isMainMenuVisible) return;
     
-    // Mettre à jour le déplacement du personnage
     moveCharacter();
     
-    // Mettre à jour les ennemis
     updateEnemies();
     
-    // Mettre à jour les météorites
     updateMeteorites();
     
-    // Mettre à jour explicitement les animations des ennemis
     enemies.forEach(enemy => {
         if (enemy.userData && enemy.userData.mixer) {
             enemy.userData.mixer.update(ANIMATION_DELTA);
         }
     });
     
-    // Vérifier les collisions avec les obstacles
     if (character) {
         checkObstacleCollisions();
     }
     
-    // Mettre à jour les animations du personnage principal
     if (mixer) {
         mixer.update(ANIMATION_DELTA);
     }
@@ -2009,23 +1974,18 @@ function animate() {
 
 // Vérifier si deux objets sont en collision
 function checkCollision(object1, object2, threshold = 1.0) {
-    // Vérifier que les deux objets existent et ont une position
     if (!object1 || !object2 || !object1.position || !object2.position) {
         return false;
     }
     
-    // Calculer la distance entre les centres des objets
     const distance = object1.position.distanceTo(object2.position);
     
-    // Ajuster le seuil en fonction du type d'objet si nécessaire
     let adjustedThreshold = threshold;
     
-    // Si c'est un ennemi qui entre en collision avec le joueur, seuil plus petit
     if (object1.userData && object1.userData.health && object2 === character) {
-        adjustedThreshold = 0.7; // Collision plus précise pour les ennemis
+        adjustedThreshold = 0.7; 
     }
     
-    // Collision si la distance est inférieure au seuil
     return distance < adjustedThreshold;
 }
 
@@ -2033,47 +1993,34 @@ function checkCollision(object1, object2, threshold = 1.0) {
 function checkObstacleCollisions() {
     if (!character) return;
     
-    // Position avant le déplacement
     const previousPosition = character.position.clone();
     
-    // Pour chaque obstacle
     for (const obstacle of obstacleObjects) {
-        // Si l'obstacle n'existe plus, passer au suivant
         if (!obstacle || !obstacle.parent) continue;
         
-        // Déterminer le rayon de collision
-        let collisionRadius = 1.0; // Valeur par défaut
+        let collisionRadius = 1.0; 
         
-        // Utiliser le rayon de collision spécifique s'il existe
         if (obstacle.userData && obstacle.userData.collisionRadius) {
             collisionRadius = obstacle.userData.collisionRadius;
         } else if (obstacle.parent && obstacle.parent.userData && obstacle.parent.userData.collisionRadius) {
-            // Si l'obstacle est un enfant, vérifier le parent
             collisionRadius = obstacle.parent.userData.collisionRadius;
         }
         
-        // Calculer la distance entre le personnage et l'obstacle
         const distance = character.position.distanceTo(obstacle.position);
         
-        // Si le personnage est en collision avec l'obstacle
         if (distance < collisionRadius) {
-            // Calculer la direction de l'obstacle vers le personnage
             const direction = new THREE.Vector3();
             direction.subVectors(character.position, obstacle.position).normalize();
             
-            // Repousser le personnage de manière plus forte
             character.position.copy(previousPosition);
             
-            // Déplacement plus important pour éviter de rester bloqué
             character.position.x += direction.x * 0.5;
             character.position.z += direction.z * 0.5;
             
-            // Mettre à jour la cible des contrôles
             if (controls && controls.target) {
                 controls.target.copy(character.position);
             }
             
-            // Sortir dès qu'une collision est détectée
             return;
         }
     }
@@ -2088,7 +2035,7 @@ function showInstructions() {
     console.log('%c[G] :', 'font-weight: bold;', 'Mode débogage - Afficher les os');
     console.log('%c[H] :', 'font-weight: bold;', 'Afficher cette aide');
     
-    // Créer un élément HTML pour les instructions
+    // Créer un  HTML pour les instructions
     const instructions = document.createElement('div');
     instructions.style.position = 'absolute';
     instructions.style.top = '10px';
@@ -2113,7 +2060,6 @@ function showInstructions() {
     
     document.body.appendChild(instructions);
     
-    // Faire disparaître les instructions après 10 secondes
     setTimeout(() => {
         instructions.style.transition = 'opacity 1s';
         instructions.style.opacity = '0';
@@ -2209,16 +2155,13 @@ function createUI() {
     updateHealthBar();
 }
 
-// Mise à jour de l'affichage du score
 function updateScoreDisplay() {
     let content = `Score: ${score}<br>Vague: ${waveNumber}<br>Ennemis: ${enemiesKilled}/${enemiesPerWave}`;
     
-    // Afficher le multiplicateur de score s'il est supérieur à 1
     if (window.scoreMultiplier && window.scoreMultiplier > 1) {
         content += `<br>Multiplicateur: x${window.scoreMultiplier}`;
     }
     
-    // Afficher le bouclier s'il est actif
     if (window.playerShield && window.playerShield > 0) {
         content += `<br>Bouclier: ${window.playerShield}`;
     }
@@ -2230,7 +2173,6 @@ function updateScoreDisplay() {
 function startGame() {
     gameStarted = true;
     
-    // S'assurer que le joueur commence avec sa vie complète
     currentHealth = playerHealth;
     updateHealthBar();
     
@@ -2242,16 +2184,12 @@ function startNextWave() {
     waveNumber++;
     enemiesKilled = 0;
     
-    // Augmenter le nombre d'ennemis par vague (ajout de 2 ennemis par vague)
     enemiesPerWave = 5 + (waveNumber - 1) * 2;
     
-    // Afficher le message de la vague
     showWaveMessage();
     
-    // Mettre à jour l'affichage du score
     updateScoreDisplay();
     
-    // Activer les météorites à partir de la vague 5
     if (waveNumber >= 5 && !meteoritesActive) {
         meteoritesActive = true;
         startMeteoriteRain();
@@ -2270,7 +2208,6 @@ function startNextWave() {
     });
 }
 
-// Afficher un message temporaire au centre de l'écran
 function showWaveMessage(message, duration) {
     const messageElement = document.createElement('div');
     messageElement.style.position = 'absolute';
@@ -2299,17 +2236,14 @@ function showWaveMessage(message, duration) {
     }, duration);
 }
 
-// Mise à jour de spawnEnemy pour utiliser le fichier WhiteclownInjured.fbx
 function spawnEnemy() {
     if (!gameStarted) return;
     
-    // Si on est déjà en train de charger un modèle, attendre
     if (isLoadingModels) {
         setTimeout(() => spawnEnemy(), 500);
         return;
     }
     
-    // Si le préchargement est toujours en cours, mettre en file d'attente
     if (isEnemyModelLoading) {
         enemyLoadingQueue++;
         setTimeout(() => {
@@ -2319,7 +2253,6 @@ function spawnEnemy() {
         return;
     }
     
-    // Si les modèles ne sont pas encore chargés, les charger maintenant
     if (!enemyModelCache) {
         preloadEnemyModels(() => spawnEnemy());
         return;
@@ -2328,14 +2261,11 @@ function spawnEnemy() {
     isLoadingModels = true;
     
     // Chargement séquentiel pour éviter les problèmes
-    // D'abord charger le modèle de base
     const loader = new FBXLoader();
     
     loader.load('/models/Whiteclown.fbx', (enemyModel) => {
-        // Ajuster l'échelle
         enemyModel.scale.set(0.01, 0.01, 0.01);
         
-        // Rendre tous les meshes visibles
         enemyModel.traverse(child => {
             if (child.isMesh) {
                 child.castShadow = true;
@@ -2358,40 +2288,33 @@ function spawnEnemy() {
         const z = character.position.z + Math.sin(angle) * radius;
         enemyModel.position.set(x, 0, z);
         
-        // Définir les propriétés de l'ennemi
         enemyModel.userData = {
             health: 100,
-            speed: 0.03 + (waveNumber * 0.005), // Vitesse qui augmente avec les vagues
+            speed: 0.03 + (waveNumber * 0.005), 
             value: 10 * waveNumber,
-            animationTime: 0 // Variable pour suivre l'animation
+            animationTime: 0 
         };
         
-        // Ajouter le modèle à la scène et à la liste des ennemis
         scene.add(enemyModel);
         enemies.push(enemyModel);
         
-        // Créer un mixer d'animation pour cet ennemi
         const mixer = new THREE.AnimationMixer(enemyModel);
         enemyModel.userData.mixer = mixer;
         
-        // Maintenant charger l'animation WhiteclownInjured.fbx
         loader.load('/models/WhiteclownInjured.fbx', (animationModel) => {
             console.log("Animation 'WhiteclownInjured' chargée");
             
-            // Vérifier si l'animation a des animations
             if (animationModel.animations && animationModel.animations.length > 0) {
                 console.log(`Nombre d'animations trouvées: ${animationModel.animations.length}`);
                 
-                // Jouer l'animation
                 const action = mixer.clipAction(animationModel.animations[0]);
                 action.setLoop(THREE.LoopRepeat);
                 action.play();
             } else {
                 console.log("Recherche d'animations dans les enfants...");
-                // Chercher des animations dans les enfants
+
                 let animations = [];
                 
-                // Parcourir tous les enfants pour trouver des animations
                 animationModel.traverse((child) => {
                     if (child.animations && child.animations.length > 0) {
                         console.log(`Animations trouvées dans un enfant: ${child.animations.length}`);
@@ -2408,7 +2331,6 @@ function spawnEnemy() {
                 } else {
                     console.log("Aucune animation trouvée.");
                     
-                    // Si aucune animation n'est trouvée, utiliser l'animation manuelle de secours
                     enemyModel.userData.useManualAnimation = true;
                 }
             }
@@ -2426,7 +2348,6 @@ function spawnEnemy() {
     });
 }
 
-// Mettre à jour les ennemis (mouvement, etc.)
 function updateEnemies() {
     if (!character) return;
     
@@ -2438,7 +2359,6 @@ function updateEnemies() {
         const direction = new THREE.Vector3();
         direction.subVectors(character.position, enemy.position).normalize();
         
-        // Sauvegarder la position précédente pour pouvoir revenir en arrière en cas de collision
         const previousPosition = enemy.position.clone();
         
         // Déplacer l'ennemi vers le joueur
@@ -2452,7 +2372,6 @@ function updateEnemies() {
                 const otherEnemy = enemies[j];
                 const distance = enemy.position.distanceTo(otherEnemy.position);
                 
-                // Utiliser un seuil de collision approprié (la somme des rayons des ennemis)
                 const collisionThreshold = 1.0; // Ajustez selon la taille de vos ennemis
                 
                 if (distance < collisionThreshold) {
@@ -2475,70 +2394,50 @@ function updateEnemies() {
         
         // Animation
         if (enemy.userData) {
-            // Incrémenter le temps d'animation
             enemy.userData.animationTime += ANIMATION_DELTA;
             
             if (enemy.userData.useManualAnimation) {
-                // Animation manuelle de secours si l'animation par fichier a échoué
-                // Oscillation de base pour simuler le mouvement
                 const baseY = 0.4;
                 const amplitude = 0.05;
-                const frequency = 5; // Hz
+                const frequency = 5; 
                 
-                // Calculer la hauteur en fonction du temps
                 const animatedY = baseY + amplitude * Math.sin(enemy.userData.animationTime * frequency);
                 
-                // Appliquer la hauteur animée
                 enemy.position.y = animatedY;
                 
-                // Légère oscillation de rotation pour simuler le balancement
                 const rotAmplitude = 0.03;
                 enemy.rotation.z = rotAmplitude * Math.sin(enemy.userData.animationTime * frequency * 2);
                 
-                // Légère oscillation avant-arrière
                 const forwardBackAmplitude = 0.02;
                 enemy.rotation.x = forwardBackAmplitude * Math.sin(enemy.userData.animationTime * frequency);
             } else {
-                // Animation par fichier
-                // Maintenir une hauteur fixe
                 enemy.position.y = 0.4;
                 
-                // Mettre à jour le mixer d'animation
                 if (enemy.userData.mixer) {
                     enemy.userData.mixer.update(ANIMATION_DELTA);
                 }
             }
         }
         
-        // Orienter l'ennemi vers le joueur
         enemy.rotation.y = Math.atan2(direction.x, direction.z);
         
-        // Vérifier les collisions avec les boules de feu
         checkEnemyFireballCollisions(enemy);
         
-        // Vérifier la collision avec le joueur
         if (character && checkCollision(enemy, character, 0.7)) {
-            // Si le joueur a un bouclier, l'utiliser au lieu de prendre des dégâts
             if (window.playerShield && window.playerShield > 0) {
                 window.playerShield--;
                 
-                // Effet visuel de bouclier
                 createShieldEffect(character.position.clone());
                 
-                // Afficher un message
                 showBonus(character.position, "Bouclier -1", 0xffaa00);
                 
-                // Repousser l'ennemi
                 enemy.position.x -= direction.x * 0.5;
                 enemy.position.z -= direction.z * 0.5;
                 
-                // Mettre à jour l'affichage
                 updateScoreDisplay();
             } else {
-                // Infliger des dégâts au joueur
-                damagePlayer(10); // 10 points de dégâts par touche
+                damagePlayer(10); 
                 
-                // Repousser légèrement l'ennemi
                 enemy.position.x -= direction.x * 0.1;
                 enemy.position.z -= direction.z * 0.1;
             }
@@ -2548,29 +2447,22 @@ function updateEnemies() {
 
 // Vérifier les collisions entre un ennemi et toutes les boules de feu
 function checkEnemyFireballCollisions(enemy) {
-    // Pour chaque boule de feu
     for (let j = 0; j < fireballGroup.children.length; j++) {
         const fireball = fireballGroup.children[j];
         
-        // Si la boule de feu touche l'ennemi
         if (checkCollision(enemy, fireball, 0.6)) {
-            // Obtenir les dégâts de la boule de feu (avec bonus éventuel)
             const damage = fireball.userData && fireball.userData.damage ? fireball.userData.damage : 50;
             
-            // Infliger des dégâts à l'ennemi
             enemy.userData.health -= damage;
             
-            // Créer un effet d'impact
             createImpactEffect(fireball.position.clone());
             
-            // Supprimer la boule de feu
             fireballGroup.remove(fireball);
-            j--; // Ajuster l'index après la suppression
+            j--; 
             
-            // Si l'ennemi n'a plus de vie, le supprimer
             if (enemy.userData.health <= 0) {
                 killEnemy(enemy);
-                return; // Sortir de la fonction puisque l'ennemi est mort
+                return; 
             }
         }
     }
@@ -2578,69 +2470,57 @@ function checkEnemyFireballCollisions(enemy) {
 
 // Tuer un ennemi
 function killEnemy(enemy) {
-    // Effet d'explosion
     createExplosionEffect(enemy.position.clone());
     
-    // Retirer l'ennemi de la liste
     const index = enemies.indexOf(enemy);
     if (index !== -1) {
         enemies.splice(index, 1);
     }
     
-    // Retirer l'ennemi de la scène
     scene.remove(enemy);
     
-    // Calculer le score en tenant compte du multiplicateur
     const scoreValue = enemy.userData.value * (window.scoreMultiplier || 1);
     
-    // Mettre à jour le score et le compteur d'ennemis tués
     score += scoreValue;
     enemiesKilled++;
     
-    // Chance d'obtenir un bonus aléatoire (20%)
     if (Math.random() < 0.2) {
-        const bonusType = Math.floor(Math.random() * 3); // 0, 1 ou 2
+        const bonusType = Math.floor(Math.random() * 3); 
         
         switch(bonusType) {
-            case 0: // Bonus de score
+            case 0: 
                 const bonusScore = 50 * waveNumber * (window.scoreMultiplier || 1);
                 score += bonusScore;
                 showBonus(enemy.position, "+"+bonusScore+" points", 0xFFD700);
                 break;
             
-            case 1: // Bonus de vitesse temporaire
-                characterSpeed = characterSpeed * 1.5; // 50% plus rapide
+            case 1: 
+                characterSpeed = characterSpeed * 1.5; 
                 setTimeout(() => { 
-                    characterSpeed = characterSpeed / 1.5; // Revenir à la normale
-                }, 5000); // Pendant 5 secondes
+                    characterSpeed = characterSpeed / 1.5; 
+                }, 5000); 
                 showBonus(enemy.position, "Vitesse +50%", 0x00FF00);
                 break;
                 
-            case 2: // Bonus de cadence de tir
-                // Réduire le délai entre les tirs pendant 5 secondes
+            case 2: 
                 const originalCooldown = fireballCooldown;
-                fireballCooldown = 100; // 100ms entre chaque tir
+                fireballCooldown = 100; 
                 setTimeout(() => { 
                     fireballCooldown = originalCooldown; 
-                }, 5000); // Pendant 5 secondes
+                }, 5000); 
                 showBonus(enemy.position, "Tir rapide", 0x00FFFF);
                 break;
         }
     }
     
-    // Mettre à jour l'affichage
     updateScoreDisplay();
     
-    // Vérifier si la vague est terminée
     if (enemiesKilled >= enemiesPerWave && enemies.length === 0) {
-        // Bonus de fin de vague
         const waveBonus = waveNumber * 100 * (window.scoreMultiplier || 1);
         score += waveBonus;
         
-        // Afficher un message indiquant le bonus
         showWaveMessage(`Vague ${waveNumber} terminée! Bonus: +${waveBonus}`, 3000);
         
-        // Afficher le menu de choix de bonus après un court délai
         setTimeout(() => {
             showBonusChoices();
         }, 3000);
@@ -2649,7 +2529,6 @@ function killEnemy(enemy) {
 
 // Afficher le menu de choix de bonus entre les vagues
 function showBonusChoices() {
-    // Créer l'élément conteneur pour les choix de bonus
     const bonusChoicesContainer = document.createElement('div');
     bonusChoicesContainer.id = 'bonus-choices';
     bonusChoicesContainer.style.position = 'fixed';
@@ -2665,7 +2544,6 @@ function showBonusChoices() {
     bonusChoicesContainer.style.zIndex = '3000';
     document.body.appendChild(bonusChoicesContainer);
     
-    // Ajouter un titre
     const title = document.createElement('h2');
     title.textContent = 'Choisissez un bonus pour la prochaine vague';
     title.style.color = 'white';
@@ -2673,7 +2551,6 @@ function showBonusChoices() {
     title.style.marginBottom = '40px';
     bonusChoicesContainer.appendChild(title);
     
-    // Conteneur pour les cartes de bonus
     const cardsContainer = document.createElement('div');
     cardsContainer.style.display = 'flex';
     cardsContainer.style.justifyContent = 'center';
