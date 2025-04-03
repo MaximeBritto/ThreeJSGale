@@ -6,11 +6,8 @@ import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as UI from './ui.js';
 
-// Vérifier si on est dans un environnement navigateur ou Node.js
-// Si on est dans Node.js (comme sur Render), créer un simili-localStorage
 if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
     console.log('Environnement Node.js détecté, utilisation d\'un localStorage de substitution');
-    // Création d'un localStorage fictif pour l'environnement Node.js
     global.localStorage = {
         _data: {},
         setItem: function(id, val) { this._data[id] = String(val); },
@@ -19,7 +16,6 @@ if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
         clear: function() { this._data = {}; }
     };
     
-    // Créer également le document et window si nécessaire pour le rendu serveur
     if (typeof document === 'undefined') {
         global.document = {
             body: {
@@ -55,15 +51,14 @@ if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
     }
 }
 
-// Variables globales
 let scene, camera, renderer, controls;
 let character, characterGroup, characterAnimation, mixer;
-let spellAction, runAction, idleAction; // Variables pour les animations
+let spellAction, runAction, idleAction; 
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
 let lastDirection = new THREE.Vector3(0, 0, 1);
 let spawnFireballInterval;
 let characterSpeed = 0.06;
-let fireballCooldown = 500; // Délai en millisecondes entre chaque boule de feu
+let fireballCooldown = 500; 
 let lastFireballTime = 0;
 let fireballs = [];
 let fireballGroup = new THREE.Group();
@@ -79,48 +74,43 @@ let isInverted = false;
 let showBones = false;
 let animationFrameId = null;
 let gameOver = false;
-let isMainMenuVisible = true; // Menu principal visible au démarrage
+let isMainMenuVisible = true; 
 let mainMenuElement = null, mapSelectionElement = null;
-let pauseMenuElement = null; // Élément DOM du menu pause
-let controlsElement, aboutElement; // Variables pour les écrans de contrôles et à propos
+let pauseMenuElement = null; 
+let controlsElement, aboutElement; 
 let selectedSpell = 'fireball';
 let keysPressed = {};
 let optionsDialogElement;
-let currentMapType = 'forest'; // Type de map actuelle (forest, desert, cave)
-let unlockedMaps = ['forest']; // Maps débloquées (au début seulement la forêt)
-let mapHighScores = { forest: 0, desert: 0, cave: 0 }; // Meilleurs scores par map
-const MAP_UNLOCK_THRESHOLDS = { desert: 5000, cave: 10000 }; // Seuils de déblocage
-const ANIMATION_DELTA = 0.016; // Temps delta fixe pour les animations (environ 60 FPS)
-let meteoritesActive = false; // Variable pour indiquer si les météorites sont actives
-let meteorites = []; // Tableau pour stocker les météorites
-let meteoriteInterval = null; // Intervalle pour faire apparaître des météorites
+let currentMapType = 'forest'; 
+let unlockedMaps = ['forest']; 
+let mapHighScores = { forest: 0, desert: 0, cave: 0 }; 
+const MAP_UNLOCK_THRESHOLDS = { desert: 5000, cave: 10000 }; 
+const ANIMATION_DELTA = 0.016; 
+let meteoritesActive = false; 
+let meteorites = []; 
+let meteoriteInterval = null; 
 
-// Préchargement des modèles et animations d'ennemis
 let enemyModelCache = null;
 let enemyRunAnimationCache = null;
 let isEnemyModelLoading = false;
 let enemyLoadingQueue = 0;
 let isLoadingModels = false;
 
-// Variables de vie du joueur
-let playerHealth = 100; // Points de vie maximum
+let playerHealth = 100; 
 let currentHealth = playerHealth;
-let isPlayerInvulnerable = false; // Pour gérer un court délai d'invulnérabilité après avoir été touché
-let healthBarElement = null; // Élément HTML pour la barre de vie
+let isPlayerInvulnerable = false; 
+let healthBarElement = null; 
 
-// Variables pour les sorts
-let currentSpellType = 'fireball'; // Type de sort par défaut (fireball, lightning, laser)
+let currentSpellType = 'fireball'; 
 
-// Variables spécifiques au déplacement
 let isMoving = false;
-let targetRotation = 0; // Rotation cible pour les transitions douces
-let rotationSpeed = 0.1; // Vitesse de rotation réduite pour une rotation plus douce
-let mousePosition = new THREE.Vector2(); // Position de la souris
+let targetRotation = 0; 
+let rotationSpeed = 0.1; 
+let mousePosition = new THREE.Vector2(); 
 
-// Variables supplémentaires pour les ennemis et le gameplay
-let enemiesPerWave = 5; // Nombre d'ennemis par vague
-let enemiesKilled = 0; // Nombre d'ennemis tués dans la vague actuelle
-let scoreDisplay; // Élément HTML pour afficher le score et les informations de vague
+let enemiesPerWave = 5; 
+let enemiesKilled = 0; 
+let scoreDisplay; 
 
 // Sauvegarder la progression du joueur
 function saveProgress() {
@@ -143,9 +133,7 @@ function saveProgress() {
     }
 }
 
-// Charger la progression du joueur
 function loadProgress() {
-    // Vérifier si localStorage est disponible (existe seulement dans les navigateurs)
     if (typeof localStorage === 'undefined') {
         console.log('localStorage n\'est pas disponible dans cet environnement');
         return;
@@ -158,12 +146,10 @@ function loadProgress() {
             try {
                 const gameData = JSON.parse(savedData);
                 
-                // Restaurer les maps débloquées
                 if (gameData.unlockedMaps) {
                     unlockedMaps = gameData.unlockedMaps;
                 }
                 
-                // Restaurer les meilleurs scores
                 if (gameData.mapHighScores) {
                     mapHighScores = gameData.mapHighScores;
                 }
@@ -182,7 +168,6 @@ function loadProgress() {
     }
 }
 
-// Mettre à jour le score de la map actuelle
 function updateMapScore() {
     // Vérifier si le score actuel est meilleur que le précédent record
     if (score > mapHighScores[currentMapType]) {
@@ -214,11 +199,9 @@ function checkMapUnlocks() {
         console.log('Map Grotte débloquée!');
     }
     
-    // Sauvegarder les changements si une nouvelle map a été débloquée
     if (newMapUnlocked) {
         saveProgress();
         
-        // Afficher un message de déblocage
         if (gameStarted) {
             showWaveMessage('Nouvelle map débloquée!', 3000);
         }
@@ -227,18 +210,12 @@ function checkMapUnlocks() {
 
 // Initialisation de la scène
 function init() {
-    // Exécuter le diagnostic des modèles
-    // Commenté car cause des erreurs "check-models"
-    // diagnosticModels();
-    
-    // Charger la progression du joueur
+
     loadProgress();
     
-    // Création de la scène
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB); // Bleu ciel pour l'ambiance
     
-    // Ajout du groupe de boules de feu à la scène
     scene.add(fireballGroup);
 
     // Création de la caméra pour une vue de dessus (2D-like)
@@ -1499,25 +1476,19 @@ function castLightningSpell() {
     createLightningBolt(startPosition, endPosition);
     
     // Chercher les ennemis dans la zone d'effet
-    const hitRadius = 2.5; // Rayon de la zone d'impact plus grand
-    const lightningDamage = 75; // Dégâts de l'éclair
-    
+    const hitRadius = 2.5; 
+    const lightningDamage = 75;
     // Vérifier chaque ennemi
     for (let i = enemies.length - 1; i >= 0; i--) {
         const enemy = enemies[i];
         
-        // Calculer la distance entre l'ennemi et le point d'impact
         const distanceToStrike = enemy.position.distanceTo(endPosition);
         
-        // Si l'ennemi est dans la zone d'impact
         if (distanceToStrike <= hitRadius) {
-            // Infliger des dégâts à l'ennemi
             enemy.userData.health -= lightningDamage;
             
-            // Créer un effet d'impact
             createImpactEffect(enemy.position.clone());
             
-            // Si l'ennemi n'a plus de vie, le supprimer
             if (enemy.userData.health <= 0) {
                 killEnemy(enemy);
             }
@@ -1527,12 +1498,10 @@ function castLightningSpell() {
 
 // Créer un effet d'éclair
 function createLightningBolt(startPosition, endPosition) {
-    // Créer un cylindre qui représente l'éclair
     const direction = new THREE.Vector3().subVectors(endPosition, startPosition);
     const height = direction.length();
     const lightningGeometry = new THREE.CylinderGeometry(0.1, 0.1, height, 6);
     
-    // Matériau brillant pour l'éclair
     const lightningMaterial = new THREE.MeshBasicMaterial({
         color: 0x00ccff,
         transparent: true,
@@ -1546,13 +1515,10 @@ function createLightningBolt(startPosition, endPosition) {
     lightning.lookAt(endPosition);
     lightning.rotateX(Math.PI / 2);
     
-    // Ajouter l'éclair à la scène
     scene.add(lightning);
     
-    // Ajouter des éclats lumineux à l'impact
     createLightningImpact(endPosition);
     
-    // Animation de l'éclair (apparition/disparition rapide)
     const animate = () => {
         // Faire clignoter l'éclair
         lightning.material.opacity -= 0.1;
@@ -1570,7 +1536,6 @@ function createLightningBolt(startPosition, endPosition) {
 
 // Créer un effet d'impact pour l'éclair
 function createLightningImpact(position) {
-    // Créer une sphère lumineuse pour l'impact
     const impactGeometry = new THREE.SphereGeometry(1.5, 16, 16);
     const impactMaterial = new THREE.MeshBasicMaterial({
         color: 0x00ccff,
@@ -1582,7 +1547,6 @@ function createLightningImpact(position) {
     impact.position.copy(position);
     scene.add(impact);
     
-    // Animation de l'impact (expansion puis disparition)
     let scale = 0.1;
     
     const animate = () => {
@@ -1604,11 +1568,9 @@ function createLightningImpact(position) {
 function castLaserSpell() {
     if (!character) return;
     
-    // Vérifier si un laser existe déjà
     const existingLaser = scene.getObjectByName("playerLaser");
     
     if (existingLaser) {
-        // Si un laser existe déjà, le supprimer (alternance on/off)
         scene.remove(existingLaser);
         return;
     }
@@ -1621,30 +1583,23 @@ function castLaserSpell() {
 function createLaserBeam() {
     if (!character) return;
     
-    // Obtenir la position et la direction du personnage
     const startPosition = character.position.clone();
     startPosition.y += 0.8; // Partir du niveau des épaules
     
-    // Utiliser la position du curseur pour déterminer la direction
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(mousePosition, camera);
     
-    // Calculer l'intersection avec le sol (ground plane à y=0)
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const targetPoint = new THREE.Vector3();
     raycaster.ray.intersectPlane(groundPlane, targetPoint);
     
-    // Obtenir la direction vers le curseur
     const direction = new THREE.Vector3().subVectors(targetPoint, startPosition).normalize();
     
-    // Calculer le point final (20 unités dans la direction du curseur)
     const endPosition = startPosition.clone().addScaledVector(direction, 20);
     
-    // Créer un cylindre qui représente le laser
-    const height = 20; // Longueur fixe du laser
+    const height = 20; 
     const laserGeometry = new THREE.CylinderGeometry(0.05, 0.05, height, 8);
     
-    // Matériau brillant pour le laser
     const laserMaterial = new THREE.MeshBasicMaterial({
         color: 0xff00ff,
         transparent: true,
@@ -1652,37 +1607,30 @@ function createLaserBeam() {
     });
     
     const laser = new THREE.Mesh(laserGeometry, laserMaterial);
-    laser.name = "playerLaser"; // Pour le retrouver facilement
+    laser.name = "playerLaser"; 
     
-    // Positionner et orienter le laser
     const midPoint = startPosition.clone().add(direction.clone().multiplyScalar(height/2));
     laser.position.copy(midPoint);
     laser.lookAt(endPosition);
     laser.rotateX(Math.PI / 2);
     
-    // Données pour les dégâts continus
     laser.userData = {
         direction: direction,
         lastDamageTime: 0,
-        damageInterval: 100, // Dégâts tous les 100ms
-        damagePerHit: 5 // 5 points de dégâts par tic
+        damageInterval: 100,
+        damagePerHit: 5
     };
     
-    // Ajouter le laser à la scène
     scene.add(laser);
     
-    // Ajouter un effet de brillance (glow)
     addLaserGlow(laser);
     
-    // Animation du laser
     const animate = () => {
-        if (!laser.parent) return; // Si le laser a été supprimé
+        if (!laser.parent) return; 
         
-        // Suivre le personnage (position et orientation)
         const newStartPosition = character.position.clone();
         newStartPosition.y += 0.8;
         
-        // Mettre à jour la direction en fonction de la position du curseur
         const newRaycaster = new THREE.Raycaster();
         newRaycaster.setFromCamera(mousePosition, camera);
         
@@ -1691,34 +1639,26 @@ function createLaserBeam() {
         
         const newDirection = new THREE.Vector3().subVectors(newTargetPoint, newStartPosition).normalize();
         
-        // Mettre à jour la position du laser
         const newEndPosition = newStartPosition.clone().addScaledVector(newDirection, height);
         const newMidPoint = newStartPosition.clone().add(newDirection.clone().multiplyScalar(height/2));
         laser.position.copy(newMidPoint);
         
-        // Orienter le laser dans la nouvelle direction
         laser.lookAt(newEndPosition);
         laser.rotateX(Math.PI / 2);
         
-        // Mettre à jour les données de direction
         laser.userData.direction = newDirection;
         
-        // Appliquer des dégâts aux ennemis touchés
         applyLaserDamage(laser, newStartPosition, newDirection);
         
-        // Effet de fluctuation légère
         const pulseScale = 1 + 0.1 * Math.sin(Date.now() * 0.01);
         laser.scale.x = pulseScale;
         laser.scale.z = pulseScale;
         
-        // Continuer l'animation
         requestAnimationFrame(animate);
     };
     
-    // Démarrer l'animation
     animate();
     
-    // Supprimer le laser après 5 secondes (éviter la surchauffe)
     setTimeout(() => {
         if (laser.parent) scene.remove(laser);
     }, 5000);
@@ -1726,7 +1666,6 @@ function createLaserBeam() {
 
 // Ajouter un effet de brillance au laser
 function addLaserGlow(laser) {
-    // Créer un second cylindre plus large et transparent
     const glowGeometry = new THREE.CylinderGeometry(0.15, 0.15, laser.geometry.parameters.height, 8);
     const glowMaterial = new THREE.MeshBasicMaterial({
         color: 0xff00ff,
@@ -1735,44 +1674,33 @@ function addLaserGlow(laser) {
     });
     
     const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-    glow.position.set(0, 0, 0); // Position relative au laser
+    glow.position.set(0, 0, 0); 
     
-    // Ajouter le glow comme enfant du laser
     laser.add(glow);
 }
 
-// Appliquer des dégâts continus aux ennemis touchés par le laser
 function applyLaserDamage(laser, startPosition, direction) {
     const now = Date.now();
     
-    // Vérifier si c'est le moment d'infliger des dégâts
     if (now - laser.userData.lastDamageTime < laser.userData.damageInterval) {
         return;
     }
     
-    // Mettre à jour le temps du dernier dégât
     laser.userData.lastDamageTime = now;
     
-    // Distance maximale du laser
     const laserLength = 20;
     
-    // Vérifier chaque ennemi
     for (let i = enemies.length - 1; i >= 0; i--) {
         const enemy = enemies[i];
         
-        // Calculer la distance de l'ennemi au point de départ du laser
         const enemyToStart = enemy.position.clone().sub(startPosition);
         
-        // Projeter cette distance sur la direction du laser
         const projectionLength = enemyToStart.dot(direction);
         
-        // Si l'ennemi est devant le joueur et dans la portée du laser
         if (projectionLength > 0 && projectionLength < laserLength) {
-            // Calculer la distance perpendiculaire au laser
             const projectionPoint = startPosition.clone().add(direction.clone().multiplyScalar(projectionLength));
             const perpendicularDistance = enemy.position.distanceTo(projectionPoint);
             
-            // Si l'ennemi est assez proche du laser
             if (perpendicularDistance < 0.8) {
                 // Infliger des dégâts à l'ennemi
                 enemy.userData.health -= laser.userData.damagePerHit;
