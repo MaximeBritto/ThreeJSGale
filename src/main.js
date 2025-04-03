@@ -4,6 +4,7 @@ import { loadModels, loadFBXModel } from './modelLoader.js';
 import { ajouterExempleDeModele } from './exemple.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import * as UI from './ui.js';
 
 // Fonction de diagnostic pour aider à déboguer les problèmes de chargement
 function diagnosticModels() {
@@ -288,7 +289,8 @@ function checkMapUnlocks() {
 // Initialisation de la scène
 function init() {
     // Exécuter le diagnostic des modèles
-    diagnosticModels();
+    // Commenté car cause des erreurs "check-models"
+    // diagnosticModels();
     
     // Charger la progression du joueur
     loadProgress();
@@ -4501,268 +4503,18 @@ function startNewGame() {
 
 // Afficher l'écran de sélection de sorts
 function showSpellSelection() {
-    // Supprimer l'ancien écran de sélection s'il existe
-    if (spellSelectionElement) {
-        document.body.removeChild(spellSelectionElement);
-    }
-    
-    // Créer le conteneur pour la sélection de sorts
-    spellSelectionElement = document.createElement('div');
-    spellSelectionElement.id = 'spell-selection';
-    spellSelectionElement.style.position = 'fixed';
-    spellSelectionElement.style.top = '0';
-    spellSelectionElement.style.left = '0';
-    spellSelectionElement.style.width = '100%';
-    spellSelectionElement.style.height = '100%';
-    spellSelectionElement.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
-    spellSelectionElement.style.display = 'flex';
-    spellSelectionElement.style.flexDirection = 'column';
-    spellSelectionElement.style.justifyContent = 'center';
-    spellSelectionElement.style.alignItems = 'center';
-    spellSelectionElement.style.zIndex = '5000';
-    
-    // Ajouter le titre
-    const title = document.createElement('h1');
-    title.textContent = 'Choisissez votre sort';
-    title.style.color = 'white';
-    title.style.fontSize = '36px';
-    title.style.marginBottom = '40px';
-    spellSelectionElement.appendChild(title);
-    
-    // Conteneur pour les cartes de sorts
-    const spellsContainer = document.createElement('div');
-    spellsContainer.style.display = 'flex';
-    spellsContainer.style.justifyContent = 'center';
-    spellsContainer.style.gap = '30px';
-    spellsContainer.style.marginBottom = '40px';
-    spellSelectionElement.appendChild(spellsContainer);
-    
-    // Définir les informations de chaque sort
-    const spells = [
-        { 
-            type: 'fireball', 
-            name: 'Boule de Feu', 
-            description: 'Sort classique qui lance une boule de feu explosive.', 
-            color: '#ff5500',
-            damage: '50 pts de dégâts',
-            cooldown: 'Délai: 0.5s',
-            icon: '🔥'
-        },
-        { 
-            type: 'lightning', 
-            name: 'Éclair', 
-            description: 'Invoque un éclair qui frappe instantanément la zone ciblée.', 
-            color: '#00ccff',
-            damage: '75 pts de dégâts',
-            cooldown: 'Délai: 1.5s',
-            icon: '⚡'
-        },
-        { 
-            type: 'laser', 
-            name: 'Rayon Laser', 
-            description: 'Projette un rayon continu qui inflige des dégâts constants.', 
-            color: '#ff00ff',
-            damage: '20 pts/sec',
-            cooldown: 'Continu avec surchauffe',
-            icon: '🌟'
-        }
-    ];
-    
-    // Créer une carte pour chaque sort
-    spells.forEach(spell => {
-        // Créer la carte
-        const spellCard = document.createElement('div');
-        spellCard.style.width = '250px';
-        spellCard.style.height = '300px';
-        spellCard.style.backgroundColor = 'rgba(40, 40, 40, 0.8)';
-        spellCard.style.border = `2px solid ${spell.color}`;
-        spellCard.style.borderRadius = '10px';
-        spellCard.style.overflow = 'hidden';
-        spellCard.style.display = 'flex';
-        spellCard.style.flexDirection = 'column';
-        spellCard.style.transition = 'transform 0.2s, box-shadow 0.2s';
-        spellCard.style.cursor = 'pointer';
-        
-        // En-tête avec icône et nom
-        const header = document.createElement('div');
-        header.style.display = 'flex';
-        header.style.alignItems = 'center';
-        header.style.padding = '15px';
-        header.style.backgroundColor = `${spell.color}33`; // Couleur avec transparence
-        header.style.borderBottom = `1px solid ${spell.color}`;
-        
-        const icon = document.createElement('div');
-        icon.textContent = spell.icon;
-        icon.style.fontSize = '30px';
-        icon.style.marginRight = '15px';
-        
-        const name = document.createElement('h3');
-        name.textContent = spell.name;
-        name.style.color = 'white';
-        name.style.margin = '0';
-        
-        header.appendChild(icon);
-        header.appendChild(name);
-        spellCard.appendChild(header);
-        
-        // Prévisualisation du sort
-        const preview = document.createElement('div');
-        preview.style.height = '100px';
-        preview.style.backgroundColor = `${spell.color}22`; // Couleur très transparente
-        preview.style.position = 'relative';
-        preview.style.overflow = 'hidden';
-        
-        // Animation de prévisualisation selon le type de sort
-        if (spell.type === 'fireball') {
-            // Animation de boule de feu
-            const fireball = document.createElement('div');
-            fireball.style.position = 'absolute';
-            fireball.style.width = '20px';
-            fireball.style.height = '20px';
-            fireball.style.backgroundColor = '#ff5500';
-            fireball.style.borderRadius = '50%';
-            fireball.style.boxShadow = '0 0 15px #ff5500, 0 0 5px #ff9900';
-            fireball.style.left = '20px';
-            fireball.style.top = '40px';
-            fireball.style.animation = 'fireballAnim 2s infinite';
-            
-            // Définir l'animation
-            const style = document.createElement('style');
-            style.textContent = `
-                @keyframes fireballAnim {
-                    0% { left: 20px; }
-                    60% { left: 180px; opacity: 1; }
-                    80% { opacity: 0; }
-                    100% { left: 20px; opacity: 0; }
-                }
-            `;
-            document.head.appendChild(style);
-            
-            preview.appendChild(fireball);
-        } else if (spell.type === 'lightning') {
-            // Animation d'éclair
-            const lightning = document.createElement('div');
-            lightning.style.position = 'absolute';
-            lightning.style.width = '8px';
-            lightning.style.height = '100px';
-            lightning.style.background = 'linear-gradient(to bottom, transparent, #00ccff, transparent)';
-            lightning.style.left = '121px';
-            lightning.style.top = '0';
-            lightning.style.opacity = '0';
-            lightning.style.animation = 'lightningAnim 3s infinite';
-            
-            // Définir l'animation
-            const style = document.createElement('style');
-            style.textContent = `
-                @keyframes lightningAnim {
-                    0%, 100% { opacity: 0; }
-                    20%, 21% { opacity: 0.8; }
-                    22%, 23% { opacity: 0; }
-                    24%, 25% { opacity: 1; }
-                    26%, 70% { opacity: 0; }
-                }
-            `;
-            document.head.appendChild(style);
-            
-            preview.appendChild(lightning);
-        } else if (spell.type === 'laser') {
-            // Animation de laser
-            const laser = document.createElement('div');
-            laser.style.position = 'absolute';
-            laser.style.width = '3px';
-            laser.style.height = '100px';
-            laser.style.backgroundColor = '#ff00ff';
-            laser.style.boxShadow = '0 0 10px #ff00ff';
-            laser.style.left = '124px';
-            laser.style.top = '0';
-            laser.style.transformOrigin = 'center bottom';
-            laser.style.animation = 'laserAnim 4s infinite';
-            
-            // Définir l'animation
-            const style = document.createElement('style');
-            style.textContent = `
-                @keyframes laserAnim {
-                    0%, 100% { transform: rotate(0deg); opacity: 0; }
-                    5% { opacity: 1; }
-                    45% { transform: rotate(30deg); }
-                    50% { transform: rotate(30deg); opacity: 1; }
-                    55% { opacity: 0; }
-                    70% { transform: rotate(0deg); }
-                }
-            `;
-            document.head.appendChild(style);
-            
-            preview.appendChild(laser);
-        }
-        
-        spellCard.appendChild(preview);
-        
-        // Informations du sort
-        const info = document.createElement('div');
-        info.style.padding = '15px';
-        info.style.flex = '1';
-        info.style.display = 'flex';
-        info.style.flexDirection = 'column';
-        info.style.color = 'white';
-        
-        // Description
-        const description = document.createElement('p');
-        description.textContent = spell.description;
-        description.style.color = '#ccc';
-        description.style.margin = '0 0 10px 0';
-        description.style.fontSize = '14px';
-        description.style.flex = '1';
-        
-        // Caractéristiques du sort (dégâts, cooldown)
-        const stats = document.createElement('div');
-        stats.style.fontSize = '12px';
-        stats.style.color = '#aaa';
-        
-        const damage = document.createElement('div');
-        damage.textContent = `Dégâts: ${spell.damage}`;
-        damage.style.marginBottom = '5px';
-        
-        const cooldown = document.createElement('div');
-        cooldown.textContent = spell.cooldown;
-        
-        stats.appendChild(damage);
-        stats.appendChild(cooldown);
-        
-        info.appendChild(description);
-        info.appendChild(stats);
-        spellCard.appendChild(info);
-        
-        // Effets de survol
-        spellCard.onmouseenter = () => {
-            spellCard.style.transform = 'scale(1.05)';
-            spellCard.style.boxShadow = `0 0 20px ${spell.color}`;
-        };
-        
-        spellCard.onmouseleave = () => {
-            spellCard.style.transform = 'scale(1)';
-            spellCard.style.boxShadow = 'none';
-        };
-        
-        // Sélectionner ce sort au clic
-        spellCard.onclick = () => {
-            // Définir le sort choisi
-            currentSpellType = spell.type;
-            
-            // Retirer l'écran de sélection
-            document.body.removeChild(spellSelectionElement);
-            
-            // Démarrer la partie
-            startActualGame();
-        };
-        
-        spellsContainer.appendChild(spellCard);
-    });
-    
-    document.body.appendChild(spellSelectionElement);
+    // Utiliser la fonction du module UI
+    UI.showSpellSelection(startActualGame);
 }
 
 // Démarrer réellement le jeu après la sélection du sort
-function startActualGame() {
+function startActualGame(spellType) {
+    // Si un type de sort a été sélectionné, le définir comme sort actuel
+    if (spellType) {
+        currentSpellType = spellType;
+        console.log(`Sort sélectionné: ${currentSpellType}`);
+    }
+    
     // Réinitialiser la santé du joueur
     currentHealth = playerHealth;
     
